@@ -31,6 +31,12 @@ setopt COMPLETE_IN_WORD
 eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv zsh)"
 
 
+# Use Homebrew Neovim as the default editor
+export EDITOR='nvim'
+export VISUAL='nvim'
+export SUDO_EDITOR='nvim'
+
+
 # ============================================================
 # Zsh completion system
 # ============================================================
