@@ -5,7 +5,7 @@
 #     "cyclopts>=4.21.0",
 # ]
 # ///
-"""配置 Samba/CIFS systemd .mount 单元的 CLI 和 Python API。"""
+"""配置 Samba/CIFS systemd unit 的 CLI 和 Python API。"""
 
 import getpass
 import os
@@ -42,19 +42,19 @@ class Messages:
 
 
 EN_MESSAGES: Final = Messages(
-    app_help="Interactively create Samba/CIFS systemd .mount units.",
-    setup_help="Create a Samba/CIFS .mount unit.",
+    app_help="Interactively create Samba/CIFS systemd units.",
+    setup_help="Create a Samba/CIFS mount unit.",
     default_help="Start interactive setup by default.",
     share="Samba share, for example //192.168.1.10/share",
     mount_path="Local mount path",
     domain="Domain/workgroup; leave empty when unused",
     username="Samba username",
     password="Samba password",
-    generated_unit="The following .mount unit will be generated:",
+    generated_unit="The following unit will be generated:",
     path="Path: {path}",
-    credential="Encrypted credential: {path}",
+    credential="Credential: {path}",
     encryption="Encryption: systemd-creds --with-key=host",
-    confirm_write="Create the encrypted credential and write these files",
+    confirm_write="Write this configuration",
     cancelled="Cancelled.",
     enable_now="Enable and start {unit} now",
     completed="Completed.",
@@ -64,19 +64,19 @@ EN_MESSAGES: Final = Messages(
 
 
 ZH_MESSAGES: Final = Messages(
-    app_help="交互式创建 Samba/CIFS systemd .mount 单元。",
-    setup_help="创建 Samba/CIFS .mount 单元。",
+    app_help="交互式创建 Samba/CIFS systemd unit。",
+    setup_help="创建 Samba/CIFS 挂载 unit。",
     default_help="默认进入交互式配置。",
     share="Samba 共享地址，例如 //192.168.1.10/share",
     mount_path="本地挂载路径",
     domain="Domain/Workgroup，可留空",
     username="Samba 用户名",
     password="Samba 密码",
-    generated_unit="将生成以下 .mount 单元：",
+    generated_unit="将生成以下 unit：",
     path="路径：{path}",
-    credential="加密 credential：{path}",
+    credential="Credential：{path}",
     encryption="加密方式：systemd-creds --with-key=host",
-    confirm_write="确认写入并创建加密 credential",
+    confirm_write="确认写入此配置",
     cancelled="已取消。",
     enable_now="是否 enable --now {unit}",
     completed="完成。",
@@ -95,6 +95,8 @@ def detect_language() -> Literal["en", "zh"]:
 
 LANGUAGE: Final = detect_language()
 MESSAGES: Final = ZH_MESSAGES if LANGUAGE == "zh" else EN_MESSAGES
+SystemdTarget = Literal["auto", "257", "258"]
+ResolvedSystemdTarget = Literal["257", "258"]
 
 
 class SambaMountError(RuntimeError):
@@ -158,9 +160,17 @@ def _validate_config(config: SambaMountConfig) -> None:
         raise SambaMountError("Samba username must not be empty")
     if not config.password:
         raise SambaMountError("Samba password must not be empty")
-    for value in (config.server, config.mount_path, config.domain, config.username, config.password):
+    for value in (
+        config.server,
+        config.mount_path,
+        config.domain,
+        config.username,
+        config.password,
+    ):
         if "\n" in value or "\r" in value:
             raise SambaMountError("Samba configuration values must not contain newlines")
+    if any(ord(char) < 32 for value in (config.server, config.mount_path) for char in value):
+        raise SambaMountError("Samba server and mount path must not contain control characters")
 
 
 def _original_user_ids() -> tuple[str, str]:
@@ -171,8 +181,28 @@ def _original_user_ids() -> tuple[str, str]:
     return str(os.getuid()), str(os.getgid())
 
 
-def _unit_name(mount_path: str) -> str:
-    return _run(["systemd-escape", "--path", "--suffix=mount", mount_path]).stdout.strip()
+def _unit_name(mount_path: str, suffix: Literal["mount", "service"]) -> str:
+    return _run(["systemd-escape", "--path", f"--suffix={suffix}", mount_path]).stdout.strip()
+
+
+def _resolve_systemd_target(target: SystemdTarget) -> ResolvedSystemdTarget:
+    if target in {"257", "258"}:
+        return target
+    if target != "auto":
+        raise SambaMountError(f"Unsupported systemd target: {target}")
+
+    first_line = _run(["systemctl", "--version"]).stdout.partition("\n")[0]
+    parts = first_line.split()
+    if len(parts) < 2 or parts[0] != "systemd":
+        raise SambaMountError(f"Cannot parse systemd version: {first_line or 'empty output'}")
+    major_text = parts[1].partition(".")[0]
+    if not major_text.isdecimal():
+        raise SambaMountError(f"Cannot parse systemd version: {first_line}")
+
+    major = int(major_text)
+    if major < 257:
+        raise SambaMountError(f"systemd {major} is not supported; version 257 or newer is required")
+    return "257" if major == 257 else "258"
 
 
 def _credential_content(config: SambaMountConfig) -> str:
@@ -182,14 +212,49 @@ def _credential_content(config: SambaMountConfig) -> str:
     return "\n".join(lines) + "\n"
 
 
-def render_samba_mount(config: SambaMountConfig) -> SambaMountResult:
-    """生成 Samba .mount unit 内容，不修改系统。"""
+def _quote_exec_argument(value: str) -> str:
+    """转义 systemd ExecStart/ExecStop 中的单个参数。"""
 
-    _validate_config(config)
-    unit_name = _unit_name(config.mount_path)
+    escaped = (
+        value.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("%", "%%")
+        .replace("$", "$$")
+    )
+    return f'"{escaped}"'
+
+
+def _quote_unit_value(value: str) -> str:
+    """转义普通 systemd unit 指令中的值。"""
+
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%")
+    return f'"{escaped}"'
+
+
+def _encrypt_credential(config: SambaMountConfig) -> str:
+    encrypted = _run(
+        _sudo_command(
+            "systemd-creds",
+            "encrypt",
+            "--with-key=host",
+            "--name=cifs-credentials",
+            "--pretty",
+            "-",
+            "-",
+        ),
+        input_text=_credential_content(config),
+    ).stdout.strip()
+    if not encrypted.startswith("SetCredentialEncrypted=cifs-credentials:"):
+        raise SambaMountError("systemd-creds returned an invalid encrypted credential")
+    return encrypted
+
+
+def _render_samba_service(
+    config: SambaMountConfig, unit_name: str, encrypted_credential: str
+) -> SambaMountResult:
     uid, gid = _original_user_ids()
     unit_path = Path("/etc/systemd/system") / unit_name
-    credential_path = Path("/etc/credstore.encrypted") / f"{unit_name.removesuffix('.mount')}.cred"
+    credential_path = Path("/run/credentials") / unit_name / "cifs-credentials"
     options = ",".join(
         (
             "credentials=%d/cifs-credentials",
@@ -201,22 +266,77 @@ def render_samba_mount(config: SambaMountConfig) -> SambaMountResult:
         )
     )
     unit_content = f"""[Unit]
-Description=Mount Samba Share ({config.server})
+Description={_quote_unit_value(f"Mount Samba Share ({config.server})")}
+After=network-online.target
+Wants=network-online.target
+Before=remote-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/mount -t cifs {_quote_exec_argument(config.server)} {_quote_exec_argument(config.mount_path)} -o {options}
+ExecStop=/usr/bin/umount {_quote_exec_argument(config.mount_path)}
+TimeoutSec=30s
+
+{encrypted_credential}
+
+[Install]
+WantedBy=remote-fs.target
+"""
+    return SambaMountResult(unit_name, unit_path, credential_path, unit_content)
+
+
+def _render_samba_mount_unit(config: SambaMountConfig, unit_name: str) -> SambaMountResult:
+    uid, gid = _original_user_ids()
+    unit_path = Path("/etc/systemd/system") / unit_name
+    credential_path = (
+        Path("/etc/credstore.encrypted") / f"{unit_name.removesuffix('.mount')}.cred"
+    )
+    options = ",".join(
+        (
+            "credentials=%d/cifs-credentials",
+            f"uid={uid}",
+            f"gid={gid}",
+            "vers=3.1.1",
+            "_netdev",
+            "rw",
+        )
+    )
+    unit_content = f"""[Unit]
+Description={_quote_unit_value(f"Mount Samba Share ({config.server})")}
 After=network-online.target
 Wants=network-online.target
 
 [Mount]
-What={config.server}
-Where={config.mount_path}
+What={_quote_unit_value(config.server)}
+Where={_quote_unit_value(config.mount_path)}
 Type=cifs
 Options={options}
 LoadCredentialEncrypted=cifs-credentials:{credential_path}
 TimeoutSec=30s
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=remote-fs.target
 """
     return SambaMountResult(unit_name, unit_path, credential_path, unit_content)
+
+
+def _render_for_target(
+    config: SambaMountConfig, target: ResolvedSystemdTarget
+) -> SambaMountResult:
+    if target == "257":
+        unit_name = _unit_name(config.mount_path, "service")
+        return _render_samba_service(config, unit_name, _encrypt_credential(config))
+    return _render_samba_mount_unit(config, _unit_name(config.mount_path, "mount"))
+
+
+def render_samba_mount(
+    config: SambaMountConfig, *, systemd_target: SystemdTarget = "auto"
+) -> SambaMountResult:
+    """根据 systemd 目标版本生成 Samba 挂载 unit。"""
+
+    _validate_config(config)
+    return _render_for_target(config, _resolve_systemd_target(systemd_target))
 
 
 def _ensure_sudo_ready() -> None:
@@ -240,25 +360,59 @@ def _write_credential(config: SambaMountConfig, result: SambaMountResult) -> Non
     _run(_sudo_command("chmod", "0600", str(result.credential_path)))
 
 
-def _write_unit(result: SambaMountResult) -> None:
+def _write_unit(result: SambaMountResult, mode: str) -> None:
     _run(
-        _sudo_command("install", "-m", "0644", "/dev/stdin", str(result.unit_path)),
+        _sudo_command(
+            "install",
+            "-o",
+            "root",
+            "-g",
+            "root",
+            "-m",
+            mode,
+            "/dev/stdin",
+            str(result.unit_path),
+        ),
         input_text=result.unit_content,
     )
 
 
-def install_samba_mount(config: SambaMountConfig, *, enable_now: bool = False) -> SambaMountResult:
-    """安装 Samba credential 和 .mount unit，并重载 systemd。"""
-
-    _validate_config(config)
-    result = render_samba_mount(config)
+def _install_rendered_samba_mount(
+    config: SambaMountConfig,
+    result: SambaMountResult,
+    *,
+    enable_now: bool,
+    systemd_target: ResolvedSystemdTarget,
+) -> SambaMountResult:
     _ensure_sudo_ready()
-    _write_credential(config, result)
-    _write_unit(result)
+    _run(_sudo_command("mkdir", "-p", config.mount_path))
+    if systemd_target == "258":
+        _write_credential(config, result)
+    _write_unit(result, "0600" if systemd_target == "257" else "0644")
     _run(_sudo_command("systemctl", "daemon-reload"))
     if enable_now:
-        _run(_sudo_command("systemctl", "enable", "--now", result.unit_name))
+        _run(_sudo_command("systemctl", "start", result.unit_name))
+        _run(_sudo_command("systemctl", "enable", result.unit_name))
     return result
+
+
+def install_samba_mount(
+    config: SambaMountConfig,
+    *,
+    enable_now: bool = False,
+    systemd_target: SystemdTarget = "auto",
+) -> SambaMountResult:
+    """根据 systemd 版本安装 Samba 挂载 unit，并重载 systemd。"""
+
+    _validate_config(config)
+    resolved_target = _resolve_systemd_target(systemd_target)
+    result = _render_for_target(config, resolved_target)
+    return _install_rendered_samba_mount(
+        config,
+        result,
+        enable_now=enable_now,
+        systemd_target=resolved_target,
+    )
 
 
 def _ask(prompt: str, default: str | None = None) -> str:
@@ -277,8 +431,13 @@ def _ask_bool(prompt: str, default: bool = False) -> bool:
     return value in {"y", "yes", "true", "1", "是"}
 
 
-def run_interactive_setup(*, dry_run: bool = False, enable_now: bool = False) -> SambaMountResult | None:
-    """交互收集 Samba 配置并生成或安装 .mount unit。"""
+def run_interactive_setup(
+    *,
+    dry_run: bool = False,
+    enable_now: bool = False,
+    systemd_target: SystemdTarget = "auto",
+) -> SambaMountResult | None:
+    """交互收集 Samba 配置并生成或安装挂载 unit。"""
 
     server = _ask(MESSAGES.share)
     mount_path = _ask(MESSAGES.mount_path, "/mnt/samba")
@@ -286,7 +445,8 @@ def run_interactive_setup(*, dry_run: bool = False, enable_now: bool = False) ->
     username = _ask(MESSAGES.username)
     password = getpass.getpass(f"{MESSAGES.password}: ")
     config = SambaMountConfig(server, mount_path, domain, username, password)
-    result = render_samba_mount(config)
+    resolved_target = _resolve_systemd_target(systemd_target)
+    result = _render_for_target(config, resolved_target)
 
     print(f"\n{MESSAGES.generated_unit}")
     print(f"{MESSAGES.path.format(path=result.unit_path)}\n")
@@ -301,7 +461,12 @@ def run_interactive_setup(*, dry_run: bool = False, enable_now: bool = False) ->
         return None
     if enable_now or _ask_bool(MESSAGES.enable_now.format(unit=result.unit_name), False):
         enable_now = True
-    result = install_samba_mount(config, enable_now=enable_now)
+    result = _install_rendered_samba_mount(
+        config,
+        result,
+        enable_now=enable_now,
+        systemd_target=resolved_target,
+    )
     print(f"\n{MESSAGES.completed}")
     print(MESSAGES.status.format(unit=result.unit_name))
     return result
@@ -315,14 +480,32 @@ def create_cli_app() -> "App":
     app = App(help=MESSAGES.app_help)
 
     @app.command
-    def setup(*, dry_run: bool = False, enable_now: bool = False) -> None:
-        """Create a Samba/CIFS .mount unit."""
-        run_interactive_setup(dry_run=dry_run, enable_now=enable_now)
+    def setup(
+        *,
+        dry_run: bool = False,
+        enable_now: bool = False,
+        systemd_target: SystemdTarget = "auto",
+    ) -> None:
+        """Create a Samba/CIFS mount unit."""
+        run_interactive_setup(
+            dry_run=dry_run,
+            enable_now=enable_now,
+            systemd_target=systemd_target,
+        )
 
     @app.default
-    def default(*, dry_run: bool = False, enable_now: bool = False) -> None:
+    def default(
+        *,
+        dry_run: bool = False,
+        enable_now: bool = False,
+        systemd_target: SystemdTarget = "auto",
+    ) -> None:
         """Start interactive setup by default."""
-        run_interactive_setup(dry_run=dry_run, enable_now=enable_now)
+        run_interactive_setup(
+            dry_run=dry_run,
+            enable_now=enable_now,
+            systemd_target=systemd_target,
+        )
 
     setup.__doc__ = MESSAGES.setup_help
     default.__doc__ = MESSAGES.default_help

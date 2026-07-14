@@ -13,7 +13,7 @@ from typing import Final
 
 from cyclopts import App
 
-from setup_samba_server import SambaMountError, run_interactive_setup
+from setup_samba_server import SambaMountError, SystemdTarget, run_interactive_setup
 
 
 MESSAGES: Final = {
@@ -51,9 +51,18 @@ def create_cli_app() -> App:
     app = App(help=_tr("app_help"))
 
     @app.command
-    def samba(*, dry_run: bool = False, enable_now: bool = False) -> None:
+    def samba(
+        *,
+        dry_run: bool = False,
+        enable_now: bool = False,
+        systemd_target: SystemdTarget = "auto",
+    ) -> None:
         """Interactively configure a Samba/CIFS mount."""
-        run_interactive_setup(dry_run=dry_run, enable_now=enable_now)
+        run_interactive_setup(
+            dry_run=dry_run,
+            enable_now=enable_now,
+            systemd_target=systemd_target,
+        )
 
     samba.__doc__ = _tr("samba_help")
     return app
