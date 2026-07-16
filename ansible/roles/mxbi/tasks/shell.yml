@@ -1,0 +1,33 @@
+---
+- name: Set Zsh as the default shell
+  become: true
+  ansible.builtin.user:
+    name: "{{ mxbi_user }}"
+    shell: /usr/bin/zsh
+
+- name: Deploy the Zsh configuration
+  become: true
+  ansible.builtin.template:
+    src: zshrc.j2
+    dest: "{{ mxbi_home }}/.zshrc"
+    owner: "{{ mxbi_user }}"
+    group: "{{ mxbi_group }}"
+    mode: '0644'
+
+- name: Create the LXTerminal configuration directory
+  become: true
+  ansible.builtin.file:
+    path: "{{ mxbi_home }}/.config/lxterminal"
+    state: directory
+    owner: "{{ mxbi_user }}"
+    group: "{{ mxbi_group }}"
+    mode: '0755'
+
+- name: Deploy the LXTerminal configuration
+  become: true
+  ansible.builtin.copy:
+    src: lxterminal/lxterminal.conf
+    dest: "{{ mxbi_home }}/.config/lxterminal/lxterminal.conf"
+    owner: "{{ mxbi_user }}"
+    group: "{{ mxbi_group }}"
+    mode: '0644'

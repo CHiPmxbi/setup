@@ -1,0 +1,17 @@
+---
+- name: Update the APT cache
+  become: true
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Upgrade system packages
+  become: true
+  ansible.builtin.apt:
+    upgrade: safe
+
+- name: Install system dependencies
+  become: true
+  ansible.builtin.apt:
+    name: "{{ mxbi_apt_packages }}"
+    state: present

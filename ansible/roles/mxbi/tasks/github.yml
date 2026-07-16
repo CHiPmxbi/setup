@@ -1,0 +1,94 @@
+---
+- name: Load the GitHub Vault
+  no_log: true
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/vault/mxbi/github.yml"
+
+- name: Validate the GitHub private key
+  no_log: true
+  ansible.builtin.assert:
+    that:
+      - vault_github_ssh_private_key is defined
+      - "'replace with the actual private key' not in vault_github_ssh_private_key"
+      - "'BEGIN OPENSSH PRIVATE KEY' in vault_github_ssh_private_key"
+    fail_msg: The GitHub Vault does not contain a valid OpenSSH private key.
+
+- name: Create the SSH configuration directory
+  become: true
+  ansible.builtin.file:
+    path: "{{ mxbi_home }}/.ssh"
+    state: directory
+    owner: "{{ mxbi_user }}"
+    group: "{{ mxbi_group }}"
+    mode: '0700'
+
+- name: Deploy the GitHub SSH private key
+  become: true
+  no_log: true
+  ansible.builtin.copy:
+    content: "{{ vault_github_ssh_private_key | trim }}\n"
+    dest: "{{ mxbi_home }}/{{ mxbi_github_ssh_private_key_path }}"
+    owner: "{{ mxbi_user }}"
+    group: "{{ mxbi_group }}"
+    mode: '0600'
+
+- name: Pin the GitHub SSH host keys
+  become: true
+  become_user: "{{ mxbi_user }}"
+  ansible.builtin.known_hosts:
+    name: github.com
+    key: "{{ item }}"
+    path: "{{ mxbi_home }}/.ssh/known_hosts"
+    state: present
+  loop: "{{ github_ssh_host_keys }}"
+  loop_control:
+    label: "{{ item.split(' ')[1] }}"
+
+- name: Configure the GitHub SSH private key
+  become: true
+  become_user: "{{ mxbi_user }}"
+  ansible.builtin.blockinfile:
+    path: "{{ mxbi_home }}/.ssh/config"
+    create: true
+    mode: '0600'
+    marker: '# {mark} mxbi GitHub SSH'
+    block: |
+      Host github.com
+        IdentityFile ~/{{ mxbi_github_ssh_private_key_path }}
+        IdentitiesOnly yes
+
+- name: Query the gh Git protocol
+  become: true
+  become_user: "{{ mxbi_user }}"
+  ansible.builtin.command:
+    cmd: "{{ mxbi_homebrew_prefix }}/bin/gh config get git_protocol --host github.com"
+  register: mxbi_gh_git_protocol
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  environment:
+    HOME: "{{ mxbi_home }}"
+  when: not ansible_check_mode
+
+- name: Configure gh to use SSH
+  become: true
+  become_user: "{{ mxbi_user }}"
+  ansible.builtin.command:
+    cmd: "{{ mxbi_homebrew_prefix }}/bin/gh config set git_protocol ssh --host github.com"
+  changed_when: true
+  environment:
+    HOME: "{{ mxbi_home }}"
+  when:
+    - not ansible_check_mode
+    - mxbi_gh_git_protocol.stdout | default('') | trim != 'ssh'
+
+- name: Verify GitHub SSH repository access # noqa command-instead-of-module
+  become: true
+  become_user: "{{ mxbi_user }}"
+  ansible.builtin.command:
+    cmd: "git ls-remote {{ mxbi_github_test_repository }} HEAD"
+  changed_when: false
+  environment:
+    HOME: "{{ mxbi_home }}"
+    GIT_SSH_COMMAND: ssh -o BatchMode=yes
+  when: not ansible_check_mode

@@ -1,0 +1,74 @@
+---
+- name: Download the Homebrew installer
+  ansible.builtin.get_url:
+    url: https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh
+    dest: /tmp/mxbi-homebrew-install.sh
+    mode: '0755'
+
+- name: Check Linuxbrew
+  ansible.builtin.stat:
+    path: "{{ mxbi_homebrew_prefix }}/bin/brew"
+  register: mxbi_homebrew_binary
+
+- name: Create the Linuxbrew installation directory
+  become: true
+  ansible.builtin.file:
+    path: "{{ mxbi_homebrew_prefix }}"
+    state: directory
+    owner: "{{ mxbi_user }}"
+    group: "{{ mxbi_group }}"
+    mode: '0755'
+  when: not mxbi_homebrew_binary.stat.exists
+
+- name: Install Linuxbrew
+  become: true
+  become_user: "{{ mxbi_user }}"
+  ansible.builtin.command:
+    cmd: /bin/bash /tmp/mxbi-homebrew-install.sh
+    creates: "{{ mxbi_homebrew_prefix }}/bin/brew"
+  environment:
+    HOME: "{{ mxbi_home }}"
+    NONINTERACTIVE: '1'
+    HOMEBREW_NO_ANALYTICS: '1'
+
+- name: Install Homebrew packages
+  become: true
+  become_user: "{{ mxbi_user }}"
+  community.general.homebrew:
+    name: "{{ mxbi_homebrew_packages }}"
+    path: "{{ mxbi_homebrew_prefix }}/bin"
+    state: present
+    update_homebrew: false
+  environment:
+    HOME: "{{ mxbi_home }}"
+    HOMEBREW_NO_AUTO_UPDATE: '1'
+  when: mxbi_homebrew_binary.stat.exists or not ansible_check_mode
+
+- name: Create the user font directory
+  become: true
+  ansible.builtin.file:
+    path: "{{ mxbi_home }}/.local/share/fonts/MapleMono-NF-CN"
+    state: directory
+    owner: "{{ mxbi_user }}"
+    group: "{{ mxbi_group }}"
+    mode: '0755'
+
+- name: Download the Maple Mono font
+  ansible.builtin.get_url:
+    url: >-
+      https://github.com/subframe7536/maple-font/releases/download/v{{ mxbi_maple_font_version
+      }}/MapleMono-NF-CN-unhinted.zip
+    dest: "/tmp/MapleMono-NF-CN-{{ mxbi_maple_font_version }}.zip"
+    checksum: "{{ mxbi_maple_font_checksum }}"
+    mode: '0644'
+
+- name: Install the Maple Mono font
+  become: true
+  become_user: "{{ mxbi_user }}"
+  ansible.builtin.unarchive:
+    src: "/tmp/MapleMono-NF-CN-{{ mxbi_maple_font_version }}.zip"
+    dest: "{{ mxbi_home }}/.local/share/fonts/MapleMono-NF-CN"
+    remote_src: true
+    creates: "{{ mxbi_home }}/.local/share/fonts/MapleMono-NF-CN/MapleMono-NF-CN-Regular.ttf"
+  notify: Refresh the user font cache
+  when: not ansible_check_mode

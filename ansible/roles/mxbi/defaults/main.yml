@@ -1,0 +1,52 @@
+---
+mxbi_user: "{{ ansible_user }}"
+mxbi_boot_config: /boot/firmware/config.txt
+mxbi_homebrew_prefix: /home/linuxbrew/.linuxbrew
+mxbi_cogmotego_installer_url: https://raw.githubusercontent.com/cagelab/cogmoteGO/main/install.sh
+mxbi_cogmotego_email_address: ANW_Setup_Protocol@dpz.eu
+mxbi_cogmotego_email_smtp_host: webmail.dpz.eu
+mxbi_cogmotego_email_smtp_port: 587
+mxbi_github_test_repository: git@github.com:CHiPmxbi/mxbi_share_config.git
+mxbi_maple_font_version: '7.9'
+mxbi_maple_font_checksum: sha256:ab88522932cf4015dffeaef6dedc59a22a5fefecdcc6e583d9fcd997da5b7cac
+
+# The matching public key must be registered with the GitHub account.
+mxbi_github_ssh_private_key_path: .ssh/id_ed25519_github
+
+# Samba is opt-in and runs only when the samba tag is explicitly selected.
+mxbi_samba_service: //infortrend-storage/Neurowissenschaften
+mxbi_samba_parent_directory: AuditorischeNeurowissenschaften/Projekte/MXBI/data
+mxbi_samba_mount_path: /home/pi/server
+mxbi_samba_username: anw-mxbisetup
+mxbi_samba_domain: DPZ
+
+mxbi_apt_packages:
+  - portaudio19-dev
+  - pipewire-audio
+  - dbus-daemon
+  - gnome-keyring
+  - libglib2.0-bin
+  - libsecret-tools
+  - build-essential
+  - bubblewrap
+  - procps
+  - curl
+  - file
+  - git
+  - zsh
+  - kitty-terminfo
+  - fontconfig
+  - fonts-noto-color-emoji
+  - unzip
+  - vim
+
+mxbi_homebrew_packages:
+  - gh
+  - neovim
+  - lazygit
+  - mediamtx
+  - uv
+  - starship
+  - carapace
+  - zsh-autosuggestions
+  - zsh-syntax-highlighting

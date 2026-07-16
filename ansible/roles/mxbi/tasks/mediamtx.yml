@@ -1,0 +1,49 @@
+---
+- name: Create MediaMTX and user systemd directories
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ mxbi_user }}"
+    group: "{{ mxbi_group }}"
+    mode: '0755'
+  loop:
+    - "{{ mxbi_home }}/.config/mediamtx"
+    - "{{ mxbi_home }}/.config/systemd/user"
+
+- name: Deploy the MediaMTX configuration
+  become: true
+  ansible.builtin.copy:
+    src: mediamtx/mediamtx.yml
+    dest: "{{ mxbi_home }}/.config/mediamtx/mediamtx.yml"
+    owner: "{{ mxbi_user }}"
+    group: "{{ mxbi_group }}"
+    mode: '0644'
+  notify: Reload and restart the MediaMTX user service
+
+- name: Deploy the MediaMTX user service
+  become: true
+  ansible.builtin.template:
+    src: mediamtx.service.j2
+    dest: "{{ mxbi_home }}/.config/systemd/user/mediamtx.service"
+    owner: "{{ mxbi_user }}"
+    group: "{{ mxbi_group }}"
+    mode: '0644'
+  notify: Reload and restart the MediaMTX user service
+
+- name: Apply MediaMTX configuration changes
+  ansible.builtin.meta: flush_handlers
+  when: not ansible_check_mode
+
+- name: Ensure the MediaMTX user service is started
+  become: true
+  become_user: "{{ mxbi_user }}"
+  ansible.builtin.systemd_service:
+    name: mediamtx.service
+    scope: user
+    enabled: true
+    state: started
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ mxbi_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ mxbi_uid }}/bus"
+  when: not ansible_check_mode

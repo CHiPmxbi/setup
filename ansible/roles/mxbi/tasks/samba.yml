@@ -1,0 +1,245 @@
+---
+- name: Load the Samba Vault
+  no_log: true
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/vault/mxbi/samba.yml"
+
+- name: Validate the Samba configuration
+  no_log: true
+  ansible.builtin.assert:
+    that:
+      - mxbi_samba_service.startswith('//')
+      - mxbi_samba_parent_directory | length > 0
+      - mxbi_samba_mount_path.startswith('/')
+      - mxbi_samba_username | length > 0
+      - inventory_hostname is match('^[A-Za-z0-9][A-Za-z0-9._-]*$')
+      - vault_samba_password is defined
+      - vault_samba_password | length > 0
+      - "'replace with the actual password' not in vault_samba_password"
+    fail_msg: The Samba configuration or Vault password is invalid.
+
+- name: Store the Samba configuration for the current device
+  no_log: true
+  ansible.builtin.set_fact:
+    mxbi_samba_share: >-
+      {{ mxbi_samba_service }}/{{ mxbi_samba_parent_directory }}/{{ inventory_hostname }}
+    mxbi_samba_credential_content: |
+      username={{ mxbi_samba_username }}
+      password={{ vault_samba_password }}
+      domain={{ mxbi_samba_domain }}
+
+- name: Validate the Samba credential format
+  no_log: true
+  ansible.builtin.assert:
+    that:
+      - mxbi_samba_credential_content.splitlines() | length == 3
+      - mxbi_samba_credential_content.splitlines()[0] == 'username=' ~ mxbi_samba_username
+      - mxbi_samba_credential_content.splitlines()[1] == 'password=' ~ vault_samba_password
+      - mxbi_samba_credential_content.splitlines()[2] == 'domain=' ~ mxbi_samba_domain
+    fail_msg: The Samba credential must contain username, password, and domain on separate lines.
+
+- name: Install Samba clients
+  become: true
+  ansible.builtin.apt:
+    name:
+      - cifs-utils
+      - smbclient
+    state: present
+
+- name: Check whether smbclient is available
+  ansible.builtin.stat:
+    path: /usr/bin/smbclient
+  register: mxbi_smbclient
+  check_mode: false
+
+- name: Verify access to the Samba parent directory
+  become: true
+  become_user: "{{ mxbi_user }}"
+  no_log: true
+  ansible.builtin.command:
+    argv:
+      - smbclient
+      - "{{ mxbi_samba_service }}"
+      - "--directory={{ mxbi_samba_parent_directory }}"
+      - "--user={{ mxbi_samba_username }}"
+      - "--workgroup={{ mxbi_samba_domain }}"
+      - --command=pwd
+  environment:
+    HOME: "{{ mxbi_home }}"
+    PASSWD: "{{ vault_samba_password }}"
+  changed_when: false
+  check_mode: false
+  when: mxbi_smbclient.stat.exists
+
+- name: Check the Samba directory for the current device
+  become: true
+  become_user: "{{ mxbi_user }}"
+  no_log: true
+  ansible.builtin.command:
+    argv:
+      - smbclient
+      - "{{ mxbi_samba_service }}"
+      - "--directory={{ mxbi_samba_parent_directory }}/{{ inventory_hostname }}"
+      - "--user={{ mxbi_samba_username }}"
+      - "--workgroup={{ mxbi_samba_domain }}"
+      - --command=pwd
+  environment:
+    HOME: "{{ mxbi_home }}"
+    PASSWD: "{{ vault_samba_password }}"
+  register: mxbi_samba_remote_directory
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: mxbi_smbclient.stat.exists
+
+- name: Create the Samba directory for the current device
+  become: true
+  become_user: "{{ mxbi_user }}"
+  no_log: true
+  ansible.builtin.command:
+    argv:
+      - smbclient
+      - "{{ mxbi_samba_service }}"
+      - "--directory={{ mxbi_samba_parent_directory }}"
+      - "--user={{ mxbi_samba_username }}"
+      - "--workgroup={{ mxbi_samba_domain }}"
+      - "--command=mkdir {{ inventory_hostname }}"
+  environment:
+    HOME: "{{ mxbi_home }}"
+    PASSWD: "{{ vault_samba_password }}"
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - mxbi_smbclient.stat.exists
+    - mxbi_samba_remote_directory.rc | default(1) != 0
+
+- name: Report the missing Samba device directory
+  ansible.builtin.debug:
+    msg: "Samba directory {{ inventory_hostname }} would be created."
+  changed_when: true
+  when:
+    - ansible_check_mode
+    - mxbi_smbclient.stat.exists
+    - mxbi_samba_remote_directory.rc | default(1) != 0
+
+- name: Generate the Samba systemd service name
+  ansible.builtin.command:
+    argv:
+      - systemd-escape
+      - --path
+      - --suffix=service
+      - "{{ mxbi_samba_mount_path }}"
+  register: mxbi_samba_systemd_escape
+  changed_when: false
+  check_mode: false
+
+- name: Store the Samba systemd paths
+  ansible.builtin.set_fact:
+    mxbi_samba_service_name: "{{ mxbi_samba_systemd_escape.stdout | trim }}"
+    mxbi_samba_credential_path: >-
+      /etc/credstore.encrypted/{{ mxbi_samba_systemd_escape.stdout | trim }}.cred
+
+- name: Create the Samba mount and credential directories
+  become: true
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ mxbi_samba_mount_path }}"
+      owner: "{{ mxbi_user }}"
+      group: "{{ mxbi_group }}"
+      mode: '0755'
+    - path: /etc/credstore.encrypted
+      owner: root
+      group: root
+      mode: '0700'
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Check the encrypted Samba credential
+  become: true
+  ansible.builtin.stat:
+    path: "{{ mxbi_samba_credential_path }}"
+  register: mxbi_samba_credential
+
+- name: Decrypt the existing Samba credential to check for changes
+  become: true
+  no_log: true
+  ansible.builtin.command:
+    argv:
+      - systemd-creds
+      - decrypt
+      - --name=cifs-credentials
+      - "{{ mxbi_samba_credential_path }}"
+      - '-'
+  register: mxbi_samba_decrypted_credential
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: mxbi_samba_credential.stat.exists
+
+- name: Determine whether the Samba credential needs an update
+  no_log: true
+  ansible.builtin.set_fact:
+    mxbi_samba_credential_needs_update: >-
+      {{
+        not mxbi_samba_credential.stat.exists
+        or mxbi_samba_decrypted_credential.rc | default(1) != 0
+        or mxbi_samba_decrypted_credential.stdout | default('')
+          != mxbi_samba_credential_content | trim
+      }}
+
+- name: Encrypt the Samba credential with the target host key
+  become: true
+  no_log: true
+  ansible.builtin.command:
+    argv:
+      - systemd-creds
+      - encrypt
+      - --with-key=host
+      - --name=cifs-credentials
+      - '-'
+      - '-'
+    stdin: "{{ mxbi_samba_credential_content }}"
+    stdin_add_newline: false
+  register: mxbi_samba_encrypted_credential
+  changed_when: true
+  check_mode: false
+  when: mxbi_samba_credential_needs_update
+
+- name: Write the encrypted Samba credential
+  become: true
+  no_log: true
+  ansible.builtin.copy:
+    content: "{{ mxbi_samba_encrypted_credential.stdout | trim }}\n"
+    dest: "{{ mxbi_samba_credential_path }}"
+    owner: root
+    group: root
+    mode: '0600'
+  notify: Reload and restart the Samba mount service
+  when: mxbi_samba_credential_needs_update
+
+- name: Deploy the Samba mount service
+  become: true
+  ansible.builtin.template:
+    src: samba-mount.service.j2
+    dest: "/etc/systemd/system/{{ mxbi_samba_service_name }}"
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Reload and restart the Samba mount service
+
+- name: Apply Samba mount configuration changes
+  ansible.builtin.meta: flush_handlers
+  when: not ansible_check_mode
+
+- name: Ensure the Samba mount service is started
+  become: true
+  ansible.builtin.systemd_service:
+    name: "{{ mxbi_samba_service_name }}"
+    enabled: true
+    state: started
+  when: not ansible_check_mode

@@ -1,0 +1,165 @@
+---
+- name: Prepare the login keyring for cogmoteGO email
+  ansible.builtin.import_tasks: keyring.yml
+
+- name: Load the cogmoteGO email Vault
+  no_log: true
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/vault/mxbi/cogmotego_email.yml"
+
+- name: Validate the cogmoteGO email configuration
+  no_log: true
+  ansible.builtin.assert:
+    that:
+      - "'@' in mxbi_cogmotego_email_address"
+      - mxbi_cogmotego_email_address != 'replace-with-email-address'
+      - mxbi_cogmotego_email_smtp_host | length > 0
+      - mxbi_cogmotego_email_smtp_host != 'replace-with-smtp-host'
+      - mxbi_cogmotego_email_smtp_port | int >= 1
+      - mxbi_cogmotego_email_smtp_port | int <= 65535
+      - vault_cogmotego_email_password is defined
+      - vault_cogmotego_email_password | length > 0
+      - vault_cogmotego_email_password == vault_cogmotego_email_password | trim
+      - "'replace with the actual password' not in vault_cogmotego_email_password"
+    fail_msg: The cogmoteGO email configuration or Vault password is invalid.
+
+- name: Install cogmoteGO email configuration dependencies
+  become: true
+  ansible.builtin.apt:
+    name:
+      - gnome-keyring
+      - libsecret-tools
+      - python3-pexpect
+    state: present
+
+- name: Check the cogmoteGO executable
+  ansible.builtin.stat:
+    path: "{{ mxbi_home }}/.local/bin/cogmoteGO"
+  register: mxbi_cogmotego_email_binary
+
+- name: Ensure cogmoteGO is installed
+  ansible.builtin.assert:
+    that:
+      - mxbi_cogmotego_email_binary.stat.exists
+      - mxbi_cogmotego_email_binary.stat.executable
+    fail_msg: Run the cogmotego module before configuring cogmoteGO email.
+
+- name: Read the current cogmoteGO email configuration
+  become: true
+  become_user: "{{ mxbi_user }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ mxbi_home }}/.local/bin/cogmoteGO"
+      - email
+      - show
+  register: mxbi_cogmotego_email_current
+  changed_when: false
+  check_mode: false
+  environment:
+    HOME: "{{ mxbi_home }}"
+    XDG_RUNTIME_DIR: "/run/user/{{ mxbi_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ mxbi_uid }}/bus"
+
+- name: Read the current cogmoteGO email password
+  become: true
+  become_user: "{{ mxbi_user }}"
+  no_log: true
+  ansible.builtin.command:
+    argv:
+      - secret-tool
+      - lookup
+      - service
+      - cogmoteGO
+      - username
+      - "{{ mxbi_cogmotego_email_address }}"
+  register: mxbi_cogmotego_email_current_password
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  environment:
+    HOME: "{{ mxbi_home }}"
+    XDG_RUNTIME_DIR: "/run/user/{{ mxbi_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ mxbi_uid }}/bus"
+
+- name: Determine whether the cogmoteGO email configuration needs an update
+  no_log: true
+  ansible.builtin.set_fact:
+    mxbi_cogmotego_email_needs_update: >-
+      {{
+        ('Email address : ' ~ mxbi_cogmotego_email_address)
+          not in mxbi_cogmotego_email_current.stdout
+        or ('SMTP host     : ' ~ mxbi_cogmotego_email_smtp_host)
+          not in mxbi_cogmotego_email_current.stdout
+        or ('SMTP port     : ' ~ (mxbi_cogmotego_email_smtp_port | string))
+          not in mxbi_cogmotego_email_current.stdout
+        or mxbi_cogmotego_email_current_password.rc != 0
+        or mxbi_cogmotego_email_current_password.stdout
+          != vault_cogmotego_email_password
+      }}
+
+- name: Report pending cogmoteGO email configuration changes
+  ansible.builtin.debug:
+    msg: The cogmoteGO email configuration would be updated.
+  changed_when: true
+  when:
+    - ansible_check_mode
+    - mxbi_cogmotego_email_needs_update
+
+- name: Configure cogmoteGO email
+  become: true
+  become_user: "{{ mxbi_user }}"
+  no_log: true
+  ansible.builtin.expect:
+    command: "{{ mxbi_home }}/.local/bin/cogmoteGO email set"
+    responses:
+      'Enter email address:': "{{ mxbi_cogmotego_email_address }}"
+      'Enter email password:': "{{ vault_cogmotego_email_password }}"
+      'Enter SMTP host:': "{{ mxbi_cogmotego_email_smtp_host }}"
+      'Enter SMTP port:': "{{ mxbi_cogmotego_email_smtp_port | string }}"
+    echo: false
+    timeout: 30
+  changed_when: true
+  notify: Reload and restart the cogmoteGO user service
+  when:
+    - not ansible_check_mode
+    - mxbi_cogmotego_email_needs_update
+  environment:
+    HOME: "{{ mxbi_home }}"
+    XDG_RUNTIME_DIR: "/run/user/{{ mxbi_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ mxbi_uid }}/bus"
+
+- name: Apply cogmoteGO email configuration changes
+  ansible.builtin.meta: flush_handlers
+  when: not ansible_check_mode
+
+- name: Verify the cogmoteGO email configuration
+  become: true
+  become_user: "{{ mxbi_user }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ mxbi_home }}/.local/bin/cogmoteGO"
+      - email
+      - show
+  register: mxbi_cogmotego_email_verified
+  changed_when: false
+  when: not ansible_check_mode
+  environment:
+    HOME: "{{ mxbi_home }}"
+    XDG_RUNTIME_DIR: "/run/user/{{ mxbi_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ mxbi_uid }}/bus"
+
+- name: Ensure the cogmoteGO email configuration is valid
+  ansible.builtin.assert:
+    that:
+      - >-
+        ('Email address : ' ~ mxbi_cogmotego_email_address)
+        in mxbi_cogmotego_email_verified.stdout
+      - >-
+        ('SMTP host     : ' ~ mxbi_cogmotego_email_smtp_host)
+        in mxbi_cogmotego_email_verified.stdout
+      - >-
+        ('SMTP port     : ' ~ (mxbi_cogmotego_email_smtp_port | string))
+        in mxbi_cogmotego_email_verified.stdout
+      - "'Credentials   : configured' in mxbi_cogmotego_email_verified.stdout"
+    fail_msg: The cogmoteGO email configuration could not be verified.
+  when: not ansible_check_mode

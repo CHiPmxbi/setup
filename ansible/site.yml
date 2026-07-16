@@ -1,0 +1,7 @@
+---
+- name: Configure mxbi Raspberry Pi devices
+  hosts: mxbi
+  gather_facts: true
+
+  roles:
+    - role: mxbi

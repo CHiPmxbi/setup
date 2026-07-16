@@ -1,0 +1,223 @@
+---
+- name: Enable user lingering
+  become: true
+  ansible.builtin.command:
+    cmd: "loginctl enable-linger {{ mxbi_user }}"
+    creates: "/var/lib/systemd/linger/{{ mxbi_user }}"
+
+- name: Create the login keyring directory
+  become: true
+  ansible.builtin.file:
+    path: "{{ mxbi_home }}/.local/share/keyrings"
+    state: directory
+    owner: "{{ mxbi_user }}"
+    group: "{{ mxbi_group }}"
+    mode: '0700'
+
+- name: Check the login keyring file
+  become: true
+  ansible.builtin.stat:
+    path: "{{ mxbi_home }}/.local/share/keyrings/login.keyring"
+  register: mxbi_login_keyring
+
+- name: Stop the GNOME Keyring user units before initialization
+  become: true
+  become_user: "{{ mxbi_user }}"
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    scope: user
+    state: stopped
+  loop:
+    - gnome-keyring-daemon.service
+    - gnome-keyring-daemon.socket
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ mxbi_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ mxbi_uid }}/bus"
+  when:
+    - not ansible_check_mode
+    - not mxbi_login_keyring.stat.exists
+
+- name: Stop residual GNOME Keyring daemons before initialization
+  become: true
+  ansible.builtin.command:
+    argv:
+      - pkill
+      - '-u'
+      - "{{ mxbi_uid }}"
+      - '-f'
+      - '(^|/)gnome-keyring-daemon( |$)'
+  register: mxbi_keyring_pkill
+  changed_when: mxbi_keyring_pkill.rc == 0
+  failed_when: mxbi_keyring_pkill.rc not in [0, 1]
+  when:
+    - not ansible_check_mode
+    - not mxbi_login_keyring.stat.exists
+
+- name: Initialize an empty-password login keyring
+  become: true
+  become_user: "{{ mxbi_user }}"
+  ansible.builtin.shell: |
+    dbus-run-session -- /bin/bash <<'KEYRING_INIT'
+    set -euo pipefail
+    control_directory="$(mktemp -d)"
+    daemon_pid=''
+
+    cleanup() {
+      if [ -n "$daemon_pid" ]; then
+        kill "$daemon_pid" 2>/dev/null || true
+        wait "$daemon_pid" 2>/dev/null || true
+      fi
+      rm -rf "$control_directory"
+    }
+    trap cleanup EXIT
+
+    printf '\0' | gnome-keyring-daemon \
+      --foreground \
+      --unlock \
+      --components=secrets \
+      --control-directory="$control_directory" \
+      >/dev/null 2>&1 &
+    daemon_pid=$!
+
+    gdbus wait --session --timeout 10 org.freedesktop.secrets
+    for attempt in {1..50}; do
+      collections="$(gdbus call --session \
+        --dest org.freedesktop.secrets \
+        --object-path /org/freedesktop/secrets \
+        --method org.freedesktop.DBus.Properties.Get \
+        org.freedesktop.Secret.Service Collections)"
+      case "$collections" in
+        *'/org/freedesktop/secrets/collection/login'*) break ;;
+      esac
+      if [ "$attempt" -eq 50 ]; then
+        printf '%s\n' 'The login keyring collection was not created.' >&2
+        exit 1
+      fi
+      sleep 0.1
+    done
+    gdbus call --session \
+      --dest org.freedesktop.secrets \
+      --object-path /org/freedesktop/secrets \
+      --method org.freedesktop.Secret.Service.SetAlias \
+      default /org/freedesktop/secrets/collection/login >/dev/null
+    KEYRING_INIT
+  args:
+    executable: /bin/bash
+  environment:
+    HOME: "{{ mxbi_home }}"
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - not mxbi_login_keyring.stat.exists
+
+- name: Ensure the GNOME Keyring user socket is started
+  become: true
+  become_user: "{{ mxbi_user }}"
+  ansible.builtin.systemd_service:
+    name: gnome-keyring-daemon.socket
+    scope: user
+    enabled: true
+    state: started
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ mxbi_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ mxbi_uid }}/bus"
+
+- name: Query the available keyring collections
+  become: true
+  become_user: "{{ mxbi_user }}"
+  ansible.builtin.command:
+    argv:
+      - gdbus
+      - call
+      - --session
+      - --dest
+      - org.freedesktop.secrets
+      - --object-path
+      - /org/freedesktop/secrets
+      - --method
+      - org.freedesktop.DBus.Properties.Get
+      - org.freedesktop.Secret.Service
+      - Collections
+  register: mxbi_keyring_collections
+  changed_when: false
+  check_mode: false
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ mxbi_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ mxbi_uid }}/bus"
+
+- name: Ensure the login keyring collection is available
+  ansible.builtin.assert:
+    that:
+      - "'/org/freedesktop/secrets/collection/login' in mxbi_keyring_collections.stdout"
+    fail_msg: The login keyring collection is unavailable or the keyring file is invalid.
+
+- name: Query the default keyring alias
+  become: true
+  become_user: "{{ mxbi_user }}"
+  ansible.builtin.command:
+    argv:
+      - gdbus
+      - call
+      - --session
+      - --dest
+      - org.freedesktop.secrets
+      - --object-path
+      - /org/freedesktop/secrets
+      - --method
+      - org.freedesktop.Secret.Service.ReadAlias
+      - default
+  register: mxbi_keyring_alias
+  changed_when: false
+  check_mode: false
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ mxbi_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ mxbi_uid }}/bus"
+
+- name: Set the login keyring as the default collection
+  become: true
+  become_user: "{{ mxbi_user }}"
+  ansible.builtin.command:
+    argv:
+      - gdbus
+      - call
+      - --session
+      - --dest
+      - org.freedesktop.secrets
+      - --object-path
+      - /org/freedesktop/secrets
+      - --method
+      - org.freedesktop.Secret.Service.SetAlias
+      - default
+      - /org/freedesktop/secrets/collection/login
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - "'/org/freedesktop/secrets/collection/login' not in mxbi_keyring_alias.stdout"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ mxbi_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ mxbi_uid }}/bus"
+
+- name: Verify the default keyring alias
+  become: true
+  become_user: "{{ mxbi_user }}"
+  ansible.builtin.command:
+    argv:
+      - gdbus
+      - call
+      - --session
+      - --dest
+      - org.freedesktop.secrets
+      - --object-path
+      - /org/freedesktop/secrets
+      - --method
+      - org.freedesktop.Secret.Service.ReadAlias
+      - default
+  register: mxbi_keyring_verified_alias
+  changed_when: false
+  failed_when: >-
+    '/org/freedesktop/secrets/collection/login' not in
+    mxbi_keyring_verified_alias.stdout
+  when: not ansible_check_mode
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ mxbi_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ mxbi_uid }}/bus"

@@ -1,0 +1,71 @@
+---
+- name: Ensure the OS family is Debian
+  ansible.builtin.assert:
+    that:
+      - ansible_facts["os_family"] == "Debian"
+    fail_msg: "Unsupported OS family: {{ ansible_facts['os_family'] }}."
+
+- name: Ensure the system is Linux
+  ansible.builtin.assert:
+    that:
+      - ansible_facts["system"] == "Linux"
+    fail_msg: "Unsupported system: {{ ansible_facts['system'] }}."
+
+- name: Ensure the architecture is aarch64
+  ansible.builtin.assert:
+    that:
+      - ansible_facts["architecture"] == "aarch64"
+    fail_msg: "Unsupported architecture: {{ ansible_facts['architecture'] }}."
+
+- name: Ensure the configured user is not root
+  ansible.builtin.assert:
+    that:
+      - mxbi_user != "root"
+    fail_msg: The configured user must not be root.
+
+- name: Read target user information
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ mxbi_user }}"
+
+- name: Store target user paths and IDs
+  ansible.builtin.set_fact:
+    mxbi_home: "{{ ansible_facts.getent_passwd[mxbi_user][4] }}"
+    mxbi_uid: "{{ ansible_facts.getent_passwd[mxbi_user][1] }}"
+    mxbi_gid: "{{ ansible_facts.getent_passwd[mxbi_user][2] }}"
+    mxbi_current_shell: "{{ ansible_facts.getent_passwd[mxbi_user][5] }}"
+
+- name: Display target user information
+  ansible.builtin.debug:
+    msg:
+      User: "{{ mxbi_user }}"
+      UID: "{{ mxbi_uid }}"
+      GID: "{{ mxbi_gid }}"
+      HOME: "{{ mxbi_home }}"
+      Current default shell: "{{ mxbi_current_shell }}"
+
+- name: Read the target user's primary group
+  ansible.builtin.getent:
+    database: group
+    key: "{{ mxbi_gid }}"
+
+- name: Store the target user's primary group name
+  ansible.builtin.set_fact:
+    mxbi_group: "{{ ansible_facts.getent_group.keys() | first }}"
+
+- name: Display the target user's primary group
+  ansible.builtin.debug:
+    msg:
+      Primary group: "{{ mxbi_group }}"
+
+- name: Check raspi-config
+  ansible.builtin.stat:
+    path: /usr/bin/raspi-config
+  register: mxbi_raspi_config
+
+- name: Ensure the target runs Raspberry Pi OS
+  ansible.builtin.assert:
+    that:
+      - mxbi_raspi_config.stat.exists
+      - mxbi_raspi_config.stat.executable
+    fail_msg: The target lacks raspi-config and is not a supported Raspberry Pi OS system.

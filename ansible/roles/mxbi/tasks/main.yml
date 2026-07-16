@@ -1,0 +1,56 @@
+---
+- name: Check the target environment and collect information
+  ansible.builtin.import_tasks: preflight.yml
+  tags:
+    - always
+
+- name: Configure system software
+  ansible.builtin.import_tasks: system.yml
+  tags:
+    - system
+
+- name: Configure the HiFiBerry Amp2
+  ansible.builtin.import_tasks: hifiberry.yml
+  tags:
+    - hifiberry
+
+- name: Configure Homebrew
+  ansible.builtin.import_tasks: homebrew.yml
+  tags:
+    - homebrew
+
+- name: Configure GitHub SSH
+  ansible.builtin.import_tasks: github.yml
+  tags:
+    - github
+
+- name: Configure shell and desktop files
+  ansible.builtin.import_tasks: shell.yml
+  tags:
+    - shell
+
+- name: Configure cogmoteGO
+  ansible.builtin.import_tasks: cogmotego.yml
+  tags:
+    - cogmotego
+
+- name: Configure cogmoteGO email
+  ansible.builtin.import_tasks: cogmotego_email.yml
+  tags:
+    - cogmotego_email
+
+- name: Configure MediaMTX
+  ansible.builtin.import_tasks: mediamtx.yml
+  tags:
+    - mediamtx
+
+- name: Configure the Samba mount
+  ansible.builtin.import_tasks: samba.yml
+  tags:
+    - never
+    - samba
+
+- name: Configure the Raspberry Pi desktop
+  ansible.builtin.import_tasks: desktop.yml
+  tags:
+    - desktop

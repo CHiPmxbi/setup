@@ -1,0 +1,9 @@
+---
+all:
+  children:
+    mxbi:
+      hosts:
+        mxbi[1:10]:
+        mxbidev:
+  vars:
+    mxbi_user: pi
