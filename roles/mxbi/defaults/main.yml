@@ -19,6 +19,7 @@ mxbi_samba_parent_directory: AuditorischeNeurowissenschaften/Projekte/MXBI/data
 mxbi_samba_mount_path: /home/pi/server
 mxbi_samba_username: anw-mxbisetup
 mxbi_samba_domain: DPZ
+mxbi_cogmotego_samba_root_name: mxbi-server
 
 mxbi_apt_packages:
   - portaudio19-dev

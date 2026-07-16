@@ -12,6 +12,7 @@
       - mxbi_samba_parent_directory | length > 0
       - mxbi_samba_mount_path.startswith('/')
       - mxbi_samba_username | length > 0
+      - mxbi_cogmotego_samba_root_name | length > 0
       - inventory_hostname is match('^[A-Za-z0-9][A-Za-z0-9._-]*$')
       - vault_samba_password is defined
       - vault_samba_password | length > 0
@@ -243,3 +244,100 @@
     enabled: true
     state: started
   when: not ansible_check_mode
+
+- name: Check the cogmoteGO configuration file
+  become: true
+  become_user: "{{ mxbi_user }}"
+  ansible.builtin.stat:
+    path: "{{ mxbi_home }}/.config/cogmoteGO/config.json"
+  register: mxbi_cogmotego_config
+  check_mode: false
+
+- name: Read the cogmoteGO Samba roots
+  become: true
+  become_user: "{{ mxbi_user }}"
+  ansible.builtin.slurp:
+    src: "{{ mxbi_home }}/.config/cogmoteGO/config.json"
+  register: mxbi_cogmotego_config_content
+  changed_when: false
+  when: mxbi_cogmotego_config.stat.exists
+
+- name: Store the configured cogmoteGO Samba roots
+  ansible.builtin.set_fact:
+    mxbi_cogmotego_samba_roots: >-
+      {{
+        (mxbi_cogmotego_config_content.content | b64decode | from_json)
+        .get('backup', {})
+        .get('samba_roots', [])
+        if mxbi_cogmotego_config.stat.exists
+        else []
+      }}
+
+- name: Find the configured cogmoteGO Samba root
+  ansible.builtin.set_fact:
+    mxbi_cogmotego_samba_root_current: >-
+      {{
+        mxbi_cogmotego_samba_roots
+        | selectattr('id', 'equalto', mxbi_cogmotego_samba_root_name)
+        | list
+      }}
+
+- name: Determine whether the cogmoteGO Samba root needs an update
+  ansible.builtin.set_fact:
+    mxbi_cogmotego_samba_root_needs_update: >-
+      {{
+        mxbi_cogmotego_samba_root_current | length != 1
+        or (mxbi_cogmotego_samba_root_current | first).path != mxbi_samba_mount_path
+      }}
+
+- name: Remove the outdated cogmoteGO Samba root
+  become: true
+  become_user: "{{ mxbi_user }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ mxbi_home }}/.local/bin/cogmoteGO"
+      - backup
+      - roots
+      - remove
+      - samba
+      - "{{ mxbi_cogmotego_samba_root_name }}"
+  environment:
+    HOME: "{{ mxbi_home }}"
+    PATH: "{{ mxbi_home }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - mxbi_cogmotego_samba_root_needs_update
+    - mxbi_cogmotego_samba_root_current | length > 0
+  notify: Reload and restart the cogmoteGO user service
+
+- name: Add the Samba mount as a cogmoteGO trusted root
+  become: true
+  become_user: "{{ mxbi_user }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ mxbi_home }}/.local/bin/cogmoteGO"
+      - backup
+      - roots
+      - add
+      - samba
+      - "{{ mxbi_cogmotego_samba_root_name }}"
+      - "{{ mxbi_samba_mount_path }}"
+  environment:
+    HOME: "{{ mxbi_home }}"
+    PATH: "{{ mxbi_home }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - mxbi_cogmotego_samba_root_needs_update
+  notify: Reload and restart the cogmoteGO user service
+
+- name: Report the cogmoteGO Samba root update in check mode
+  ansible.builtin.debug:
+    msg: >-
+      cogmoteGO Samba root {{ mxbi_cogmotego_samba_root_name }} would point to
+      {{ mxbi_samba_mount_path }}.
+  changed_when: true
+  when:
+    - ansible_check_mode
+    - mxbi_cogmotego_samba_root_needs_update

@@ -1,14 +1,15 @@
 ---
+- name: Check Linuxbrew
+  ansible.builtin.stat:
+    path: "{{ mxbi_homebrew_prefix }}/bin/brew"
+  register: mxbi_homebrew_binary
+
 - name: Download the Homebrew installer
   ansible.builtin.get_url:
     url: https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh
     dest: /tmp/mxbi-homebrew-install.sh
     mode: '0755'
-
-- name: Check Linuxbrew
-  ansible.builtin.stat:
-    path: "{{ mxbi_homebrew_prefix }}/bin/brew"
-  register: mxbi_homebrew_binary
+  when: not mxbi_homebrew_binary.stat.exists
 
 - name: Create the Linuxbrew installation directory
   become: true
@@ -37,8 +38,8 @@
   community.general.homebrew:
     name: "{{ mxbi_homebrew_packages }}"
     path: "{{ mxbi_homebrew_prefix }}/bin"
-    state: present
-    update_homebrew: false
+    state: latest
+    update_homebrew: true
   environment:
     HOME: "{{ mxbi_home }}"
     HOMEBREW_NO_AUTO_UPDATE: '1'
@@ -53,7 +54,12 @@
     group: "{{ mxbi_group }}"
     mode: '0755'
 
-- name: Download the Maple Mono font
+- name: Check whether the Maple Mono font is installed
+  ansible.builtin.stat:
+    path: "{{ mxbi_home }}/.local/share/fonts/MapleMono-NF-CN/MapleMono-NF-CN-Regular.ttf"
+  register: mxbi_maple_font_file
+
+- name: Download the Maple Mono font archive
   ansible.builtin.get_url:
     url: >-
       https://github.com/subframe7536/maple-font/releases/download/v{{ mxbi_maple_font_version
@@ -61,6 +67,7 @@
     dest: "/tmp/MapleMono-NF-CN-{{ mxbi_maple_font_version }}.zip"
     checksum: "{{ mxbi_maple_font_checksum }}"
     mode: '0644'
+  when: not mxbi_maple_font_file.stat.exists
 
 - name: Install the Maple Mono font
   become: true
