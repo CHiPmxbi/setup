@@ -75,7 +75,9 @@ mxbi:
     mxbi2:
 ```
 
-Verify each alias with `ssh mxbi1` before running Ansible.
+The inventory enables `StrictHostKeyChecking=accept-new`: Ansible automatically
+records an unknown host key on its first connection, but fails if a recorded key
+subsequently changes.
 
 ## Provisioning
 

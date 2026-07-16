@@ -5,5 +5,7 @@ all:
       hosts:
         mxbi[1:10]:
         mxbidev:
+      vars:
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=accept-new"
   vars:
     mxbi_user: pi

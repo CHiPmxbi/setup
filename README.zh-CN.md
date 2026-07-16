@@ -68,7 +68,7 @@ mxbi:
     mxbi2:
 ```
 
-执行 Ansible 前，先通过 `ssh mxbi1` 验证每个别名可以正常连接。
+inventory 启用了 `StrictHostKeyChecking=accept-new`：Ansible 首次连接未知主机时会自动记录其密钥；已记录主机的密钥发生变化时则会失败。
 
 ## 配置目标机
 
