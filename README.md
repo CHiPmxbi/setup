@@ -12,9 +12,29 @@ target account must be a non-root sudo user. Its GitHub SSH public key must
 already be registered with GitHub.
 
 ```nu
-brew install ansible
+brew install ansible ansible-lint just
 ansible-galaxy collection install -r requirements.yml
 ```
+
+## Common Commands
+
+The top-level `justfile` provides short commands for common operations:
+
+```nu
+just install
+just check
+just inventory
+just tags
+just site
+just site mxbi1 --tags shell
+just site-check mxbi1
+just exp mxbi5
+just exp-check group1
+just samba mxbi5
+```
+
+Recipe arguments are passed through to Ansible. Recipes that load a Vault leave
+password entry to Ansible's interactive prompt.
 
 ## Configuration
 

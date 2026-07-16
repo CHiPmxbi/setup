@@ -10,9 +10,28 @@
 具有 sudo 权限的非 root 用户，其 GitHub SSH 公钥必须已经注册到 GitHub。
 
 ```nu
-brew install ansible
+brew install ansible ansible-lint just
 ansible-galaxy collection install -r requirements.yml
 ```
+
+## 常用命令
+
+顶层 `justfile` 为常用操作提供简短命令：
+
+```nu
+just install
+just check
+just inventory
+just tags
+just site
+just site mxbi1 --tags shell
+just site-check mxbi1
+just exp mxbi5
+just exp-check group1
+just samba mxbi5
+```
+
+配方参数会直接传递给 Ansible。读取 Vault 的配方仍由 Ansible 交互式提示输入密码。
 
 ## 配置
 
