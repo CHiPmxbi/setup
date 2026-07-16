@@ -29,6 +29,7 @@ setopt COMPLETE_IN_WORD
 # ============================================================
 
 eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv zsh)"
+export PATH="$HOME/.local/bin:$PATH"
 
 
 # Use Homebrew Neovim as the default editor

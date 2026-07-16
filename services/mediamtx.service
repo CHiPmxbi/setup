@@ -1,0 +1,13 @@
+[Unit]
+Description=MediaMTX real-time media server
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+ExecStart=/home/linuxbrew/.linuxbrew/bin/mediamtx %h/.config/mediamtx/mediamtx.yml
+WorkingDirectory=%h
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=default.target
