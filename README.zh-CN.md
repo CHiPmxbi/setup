@@ -121,8 +121,3 @@ uv run setup_samba_server.py --help
 ```
 
 Ansible 配置过程不依赖这些工具。
-
-## 旧 Bootstrap
-
-`bootstrap/bootstrap.sh` 和根目录中剩余的 dotfiles 仅保留到完整 Ansible 执行及第二次
-幂等性执行成功。不要继续扩展旧入口；Ansible 是配置入口。

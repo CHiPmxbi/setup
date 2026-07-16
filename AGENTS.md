@@ -1,9 +1,6 @@
 # Repository Notes
 
-## Bootstrap
-
 - Treat `ansible/site.yml` as the provisioning entrypoint.
-- `bootstrap/bootstrap.sh` and the root dotfiles are legacy fallback assets pending a complete Ansible run and idempotency verification. Do not extend them.
 - The repository is a control-machine setup project and must not be cloned onto managed devices as part of provisioning.
 
 ## Python Tools

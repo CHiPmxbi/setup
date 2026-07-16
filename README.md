@@ -130,9 +130,3 @@ uv run setup_samba_server.py --help
 ```
 
 These tools are not required for Ansible provisioning.
-
-## Legacy Bootstrap
-
-`bootstrap/bootstrap.sh` and the remaining root dotfiles are retained only until
-a complete Ansible run and a second idempotency run succeed. Do not extend the
-legacy path; Ansible is the provisioning entrypoint.
