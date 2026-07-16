@@ -1,7 +1,7 @@
-ansible/.vault-password
-ansible/vault/mxbi/*.yml
-ansible/inventory/hosts.yml
-ansible/**/*.key
+.vault-password
+vault/mxbi/*.yml
+inventory/hosts.yml
+**/*.key
 *.retry
 .ansible/
 **/.venv/
