@@ -49,8 +49,9 @@ ansible-vault edit vault/mxbi/github.yml
 `vault/mxbi/github.yml` 已被 Git 忽略，并且仅由 `github` tag 加载。
 
 完整配置默认启用 cogmoteGO email。先在 `roles/rpi_mxbi_baseline/defaults/main.yml` 中设置
-`mxbi_cogmotego_email_address`、`mxbi_cogmotego_email_smtp_host` 和
-`mxbi_cogmotego_email_smtp_port`，再创建并加密密码 Vault：
+`rpi_mxbi_baseline_cogmotego_email_address`、
+`rpi_mxbi_baseline_cogmotego_email_smtp_host` 和
+`rpi_mxbi_baseline_cogmotego_email_smtp_port`，再创建并加密密码 Vault：
 
 ```nu
 cp vault/mxbi/cogmotego_email.yml.example vault/mxbi/cogmotego_email.yml

@@ -1,27 +1,27 @@
 ---
-mxbi_user: "{{ ansible_user }}"
-mxbi_boot_config: /boot/firmware/config.txt
-mxbi_homebrew_prefix: /home/linuxbrew/.linuxbrew
-mxbi_cogmotego_installer_url: https://raw.githubusercontent.com/cagelab/cogmoteGO/main/install.sh
-mxbi_cogmotego_email_address: ANW_Setup_Protocol@dpz.eu
-mxbi_cogmotego_email_smtp_host: webmail.dpz.eu
-mxbi_cogmotego_email_smtp_port: 587
-mxbi_github_test_repository: git@github.com:CHiPmxbi/mxbi_share_config.git
-mxbi_maple_font_version: '7.9'
-mxbi_maple_font_checksum: sha256:ab88522932cf4015dffeaef6dedc59a22a5fefecdcc6e583d9fcd997da5b7cac
+rpi_mxbi_baseline_user: "{{ ansible_user }}"
+rpi_mxbi_baseline_boot_config: /boot/firmware/config.txt
+rpi_mxbi_baseline_homebrew_prefix: /home/linuxbrew/.linuxbrew
+rpi_mxbi_baseline_cogmotego_installer_url: https://raw.githubusercontent.com/cagelab/cogmoteGO/main/install.sh
+rpi_mxbi_baseline_cogmotego_email_address: ANW_Setup_Protocol@dpz.eu
+rpi_mxbi_baseline_cogmotego_email_smtp_host: webmail.dpz.eu
+rpi_mxbi_baseline_cogmotego_email_smtp_port: 587
+rpi_mxbi_baseline_github_test_repository: git@github.com:CHiPmxbi/rpi_mxbi_baseline_share_config.git
+rpi_mxbi_baseline_maple_font_version: '7.9'
+rpi_mxbi_baseline_maple_font_checksum: sha256:ab88522932cf4015dffeaef6dedc59a22a5fefecdcc6e583d9fcd997da5b7cac
 
 # The matching public key must be registered with the GitHub account.
-mxbi_github_ssh_private_key_path: .ssh/id_ed25519_github
+rpi_mxbi_baseline_github_ssh_private_key_path: .ssh/id_ed25519_github
 
 # Samba is opt-in and runs only when the samba tag is explicitly selected.
-mxbi_samba_service: //infortrend-storage/Neurowissenschaften
-mxbi_samba_parent_directory: AuditorischeNeurowissenschaften/Projekte/MXBI/data
-mxbi_samba_mount_path: /home/pi/server
-mxbi_samba_username: anw-mxbisetup
-mxbi_samba_domain: DPZ
-mxbi_cogmotego_samba_root_name: mxbi-server
+rpi_mxbi_baseline_samba_service: //infortrend-storage/Neurowissenschaften
+rpi_mxbi_baseline_samba_parent_directory: AuditorischeNeurowissenschaften/Projekte/MXBI/data
+rpi_mxbi_baseline_samba_mount_path: /home/pi/server
+rpi_mxbi_baseline_samba_username: anw-mxbisetup
+rpi_mxbi_baseline_samba_domain: DPZ
+rpi_mxbi_baseline_cogmotego_samba_root_name: mxbi-server
 
-mxbi_apt_packages:
+rpi_mxbi_baseline_apt_packages:
   - portaudio19-dev
   - pipewire-audio
   - dbus-daemon
@@ -41,7 +41,7 @@ mxbi_apt_packages:
   - unzip
   - vim
 
-mxbi_homebrew_packages:
+rpi_mxbi_baseline_homebrew_packages:
   - gh
   - neovim
   - lazygit

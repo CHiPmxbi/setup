@@ -5,7 +5,7 @@ Wants=network-online.target
 After=network-online.target
 
 [Service]
-ExecStart={{ mxbi_homebrew_prefix }}/bin/mediamtx %h/.config/mediamtx/mediamtx.yml
+ExecStart={{ rpi_mxbi_baseline_homebrew_prefix }}/bin/mediamtx %h/.config/mediamtx/mediamtx.yml
 WorkingDirectory=%h
 Restart=on-failure
 RestartSec=5s

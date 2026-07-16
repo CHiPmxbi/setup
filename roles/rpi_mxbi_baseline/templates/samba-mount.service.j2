@@ -1,5 +1,5 @@
 [Unit]
-Description=Mount Samba share {{ mxbi_samba_share }}
+Description=Mount Samba share {{ rpi_mxbi_baseline_samba_share }}
 After=network-online.target
 Wants=network-online.target
 Before=remote-fs.target
@@ -7,10 +7,10 @@ Before=remote-fs.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/bin/mount -t cifs "{{ mxbi_samba_share }}" "{{ mxbi_samba_mount_path }}" -o credentials=%d/cifs-credentials,uid={{ mxbi_uid }},gid={{ mxbi_gid }},vers=3.1.1,_netdev,rw
-ExecStop=/usr/bin/umount "{{ mxbi_samba_mount_path }}"
+ExecStart=/usr/bin/mount -t cifs "{{ rpi_mxbi_baseline_samba_share }}" "{{ rpi_mxbi_baseline_samba_mount_path }}" -o credentials=%d/cifs-credentials,uid={{ rpi_mxbi_baseline_uid }},gid={{ rpi_mxbi_baseline_gid }},vers=3.1.1,_netdev,rw
+ExecStop=/usr/bin/umount "{{ rpi_mxbi_baseline_samba_mount_path }}"
 TimeoutSec=30s
-LoadCredentialEncrypted=cifs-credentials:{{ mxbi_samba_credential_path }}
+LoadCredentialEncrypted=cifs-credentials:{{ rpi_mxbi_baseline_samba_credential_path }}
 
 [Install]
 WantedBy=remote-fs.target

@@ -13,5 +13,5 @@
 - name: Install system dependencies
   become: true
   ansible.builtin.apt:
-    name: "{{ mxbi_apt_packages }}"
+    name: "{{ rpi_mxbi_baseline_apt_packages }}"
     state: present

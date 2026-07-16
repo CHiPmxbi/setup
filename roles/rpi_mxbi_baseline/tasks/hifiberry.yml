@@ -1,46 +1,46 @@
 ---
 - name: Check the Raspberry Pi boot configuration
   ansible.builtin.stat:
-    path: "{{ mxbi_boot_config }}"
-  register: mxbi_boot_config_stat
+    path: "{{ rpi_mxbi_baseline_boot_config }}"
+  register: rpi_mxbi_baseline_boot_config_stat
 
 - name: Ensure the Raspberry Pi boot configuration exists
   ansible.builtin.assert:
     that:
-      - mxbi_boot_config_stat.stat.exists
-      - mxbi_boot_config_stat.stat.isreg
-    fail_msg: "Raspberry Pi boot configuration not found: {{ mxbi_boot_config }}"
+      - rpi_mxbi_baseline_boot_config_stat.stat.exists
+      - rpi_mxbi_baseline_boot_config_stat.stat.isreg
+    fail_msg: "Raspberry Pi boot configuration not found: {{ rpi_mxbi_baseline_boot_config }}"
 
 - name: Read the Raspberry Pi boot configuration
   become: true
   ansible.builtin.slurp:
-    path: "{{ mxbi_boot_config }}"
-  register: mxbi_boot_config_content
+    path: "{{ rpi_mxbi_baseline_boot_config }}"
+  register: rpi_mxbi_baseline_boot_config_content
 
 - name: Ensure the boot configuration contains an all section
   ansible.builtin.assert:
     that:
-      - "'[all]' in (mxbi_boot_config_content.content | b64decode).splitlines()"
-    fail_msg: "{{ mxbi_boot_config }} does not contain an [all] section."
+      - "'[all]' in (rpi_mxbi_baseline_boot_config_content.content | b64decode).splitlines()"
+    fail_msg: "{{ rpi_mxbi_baseline_boot_config }} does not contain an [all] section."
 
 - name: Disable onboard audio
   become: true
   ansible.builtin.lineinfile:
-    path: "{{ mxbi_boot_config }}"
+    path: "{{ rpi_mxbi_baseline_boot_config }}"
     regexp: '^dtparam=audio=on$'
     line: '# dtparam=audio=on'
 
 - name: Disable VC4 HDMI audio
   become: true
   ansible.builtin.lineinfile:
-    path: "{{ mxbi_boot_config }}"
+    path: "{{ rpi_mxbi_baseline_boot_config }}"
     regexp: '^dtoverlay=vc4-kms-v3d$'
     line: 'dtoverlay=vc4-kms-v3d,noaudio'
 
 - name: Configure the HiFiBerry Amp2 overlay
   become: true
   ansible.builtin.blockinfile:
-    path: "{{ mxbi_boot_config }}"
+    path: "{{ rpi_mxbi_baseline_boot_config }}"
     insertafter: '^\[all\]$'
     marker: '# {mark} mxbi HiFiBerry Amp2'
     block: |

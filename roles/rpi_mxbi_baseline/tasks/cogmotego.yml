@@ -1,33 +1,33 @@
 ---
 - name: Download the cogmoteGO installer
   ansible.builtin.get_url:
-    url: "{{ mxbi_cogmotego_installer_url }}"
+    url: "{{ rpi_mxbi_baseline_cogmotego_installer_url }}"
     dest: /tmp/mxbi-cogmotego-install.sh
     mode: '0755'
 
 - name: Install or update cogmoteGO
   become: true
-  become_user: "{{ mxbi_user }}"
+  become_user: "{{ rpi_mxbi_baseline_user }}"
   ansible.builtin.command:
     cmd: /bin/sh /tmp/mxbi-cogmotego-install.sh
-  register: mxbi_cogmotego_install
-  changed_when: "'Already up to date' not in mxbi_cogmotego_install.stdout"
+  register: rpi_mxbi_baseline_cogmotego_install
+  changed_when: "'Already up to date' not in rpi_mxbi_baseline_cogmotego_install.stdout"
   notify: Reload and restart the cogmoteGO user service
   environment:
-    HOME: "{{ mxbi_home }}"
-    PATH: "{{ mxbi_home }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+    HOME: "{{ rpi_mxbi_baseline_home }}"
+    PATH: "{{ rpi_mxbi_baseline_home }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
   when: not ansible_check_mode
 
 - name: Register the cogmoteGO user service
   become: true
-  become_user: "{{ mxbi_user }}"
+  become_user: "{{ rpi_mxbi_baseline_user }}"
   ansible.builtin.command:
-    cmd: "{{ mxbi_home }}/.local/bin/cogmoteGO service -u"
-    creates: "{{ mxbi_home }}/.config/systemd/user/cogmoteGO.service"
+    cmd: "{{ rpi_mxbi_baseline_home }}/.local/bin/cogmoteGO service -u"
+    creates: "{{ rpi_mxbi_baseline_home }}/.config/systemd/user/cogmoteGO.service"
   environment:
-    HOME: "{{ mxbi_home }}"
-    XDG_RUNTIME_DIR: "/run/user/{{ mxbi_uid }}"
-    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ mxbi_uid }}/bus"
+    HOME: "{{ rpi_mxbi_baseline_home }}"
+    XDG_RUNTIME_DIR: "/run/user/{{ rpi_mxbi_baseline_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ rpi_mxbi_baseline_uid }}/bus"
   notify: Reload and restart the cogmoteGO user service
   when: not ansible_check_mode
 
@@ -37,13 +37,13 @@
 
 - name: Enable and start the cogmoteGO user service
   become: true
-  become_user: "{{ mxbi_user }}"
+  become_user: "{{ rpi_mxbi_baseline_user }}"
   ansible.builtin.systemd_service:
     name: cogmoteGO.service
     scope: user
     enabled: true
     state: started
   environment:
-    XDG_RUNTIME_DIR: "/run/user/{{ mxbi_uid }}"
-    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ mxbi_uid }}/bus"
+    XDG_RUNTIME_DIR: "/run/user/{{ rpi_mxbi_baseline_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ rpi_mxbi_baseline_uid }}/bus"
   when: not ansible_check_mode

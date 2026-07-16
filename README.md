@@ -53,8 +53,10 @@ commit an unencrypted private key. The local `vault/mxbi/github.yml` is ignored 
 Git and is loaded only by the `github` tag.
 
 cogmoteGO email configuration is enabled during full provisioning. Set
-`mxbi_cogmotego_email_address`, `mxbi_cogmotego_email_smtp_host`, and
-`mxbi_cogmotego_email_smtp_port` in `roles/rpi_mxbi_baseline/defaults/main.yml`, then create
+`rpi_mxbi_baseline_cogmotego_email_address`,
+`rpi_mxbi_baseline_cogmotego_email_smtp_host`, and
+`rpi_mxbi_baseline_cogmotego_email_smtp_port` in
+`roles/rpi_mxbi_baseline/defaults/main.yml`, then create
 and encrypt its password Vault:
 
 ```nu

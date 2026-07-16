@@ -1,6 +1,6 @@
 ---
-experiment_user: "{{ mxbi_user | default(ansible_user) }}"
-experiment_homebrew_prefix: "{{ mxbi_homebrew_prefix | default('/home/linuxbrew/.linuxbrew') }}"
+experiment_user: "{{ rpi_mxbi_baseline_user | default(ansible_user) }}"
+experiment_homebrew_prefix: "{{ rpi_mxbi_baseline_homebrew_prefix | default('/home/linuxbrew/.linuxbrew') }}"
 experiment_shared_config_repository: git@github.com:CHiPmxbi/mxbi_share_config.git
 experiment_shared_config_version: main
 experiment_repository_version: main

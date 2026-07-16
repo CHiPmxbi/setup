@@ -1,41 +1,41 @@
 ---
 - name: Reload and restart the cogmoteGO user service
   become: true
-  become_user: "{{ mxbi_user }}"
+  become_user: "{{ rpi_mxbi_baseline_user }}"
   ansible.builtin.systemd_service:
     name: cogmoteGO.service
     scope: user
     daemon_reload: true
     state: restarted
   environment:
-    XDG_RUNTIME_DIR: "/run/user/{{ mxbi_uid }}"
-    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ mxbi_uid }}/bus"
+    XDG_RUNTIME_DIR: "/run/user/{{ rpi_mxbi_baseline_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ rpi_mxbi_baseline_uid }}/bus"
   when: not ansible_check_mode
 
 - name: Reload and restart the MediaMTX user service
   become: true
-  become_user: "{{ mxbi_user }}"
+  become_user: "{{ rpi_mxbi_baseline_user }}"
   ansible.builtin.systemd_service:
     name: mediamtx.service
     scope: user
     daemon_reload: true
     state: restarted
   environment:
-    XDG_RUNTIME_DIR: "/run/user/{{ mxbi_uid }}"
-    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ mxbi_uid }}/bus"
+    XDG_RUNTIME_DIR: "/run/user/{{ rpi_mxbi_baseline_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ rpi_mxbi_baseline_uid }}/bus"
   when: not ansible_check_mode
 
 - name: Reload and restart the Samba mount service
   become: true
   ansible.builtin.systemd_service:
-    name: "{{ mxbi_samba_service_name }}"
+    name: "{{ rpi_mxbi_baseline_samba_service_name }}"
     daemon_reload: true
     state: restarted
   when: not ansible_check_mode
 
 - name: Refresh the user font cache
   become: true
-  become_user: "{{ mxbi_user }}"
+  become_user: "{{ rpi_mxbi_baseline_user }}"
   ansible.builtin.command:
-    cmd: fc-cache -f "{{ mxbi_home }}/.local/share/fonts"
+    cmd: fc-cache -f "{{ rpi_mxbi_baseline_home }}/.local/share/fonts"
   changed_when: true

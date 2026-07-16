@@ -20,52 +20,52 @@
 - name: Ensure the configured user is not root
   ansible.builtin.assert:
     that:
-      - mxbi_user != "root"
+      - rpi_mxbi_baseline_user != "root"
     fail_msg: The configured user must not be root.
 
 - name: Read target user information
   ansible.builtin.getent:
     database: passwd
-    key: "{{ mxbi_user }}"
+    key: "{{ rpi_mxbi_baseline_user }}"
 
 - name: Store target user paths and IDs
   ansible.builtin.set_fact:
-    mxbi_home: "{{ ansible_facts.getent_passwd[mxbi_user][4] }}"
-    mxbi_uid: "{{ ansible_facts.getent_passwd[mxbi_user][1] }}"
-    mxbi_gid: "{{ ansible_facts.getent_passwd[mxbi_user][2] }}"
-    mxbi_current_shell: "{{ ansible_facts.getent_passwd[mxbi_user][5] }}"
+    rpi_mxbi_baseline_home: "{{ ansible_facts.getent_passwd[rpi_mxbi_baseline_user][4] }}"
+    rpi_mxbi_baseline_uid: "{{ ansible_facts.getent_passwd[rpi_mxbi_baseline_user][1] }}"
+    rpi_mxbi_baseline_gid: "{{ ansible_facts.getent_passwd[rpi_mxbi_baseline_user][2] }}"
+    rpi_mxbi_baseline_current_shell: "{{ ansible_facts.getent_passwd[rpi_mxbi_baseline_user][5] }}"
 
 - name: Display target user information
   ansible.builtin.debug:
     msg:
-      User: "{{ mxbi_user }}"
-      UID: "{{ mxbi_uid }}"
-      GID: "{{ mxbi_gid }}"
-      HOME: "{{ mxbi_home }}"
-      Current default shell: "{{ mxbi_current_shell }}"
+      User: "{{ rpi_mxbi_baseline_user }}"
+      UID: "{{ rpi_mxbi_baseline_uid }}"
+      GID: "{{ rpi_mxbi_baseline_gid }}"
+      HOME: "{{ rpi_mxbi_baseline_home }}"
+      Current default shell: "{{ rpi_mxbi_baseline_current_shell }}"
 
 - name: Read the target user's primary group
   ansible.builtin.getent:
     database: group
-    key: "{{ mxbi_gid }}"
+    key: "{{ rpi_mxbi_baseline_gid }}"
 
 - name: Store the target user's primary group name
   ansible.builtin.set_fact:
-    mxbi_group: "{{ ansible_facts.getent_group.keys() | first }}"
+    rpi_mxbi_baseline_group: "{{ ansible_facts.getent_group.keys() | first }}"
 
 - name: Display the target user's primary group
   ansible.builtin.debug:
     msg:
-      Primary group: "{{ mxbi_group }}"
+      Primary group: "{{ rpi_mxbi_baseline_group }}"
 
 - name: Check raspi-config
   ansible.builtin.stat:
     path: /usr/bin/raspi-config
-  register: mxbi_raspi_config
+  register: rpi_mxbi_baseline_raspi_config
 
 - name: Ensure the target runs Raspberry Pi OS
   ansible.builtin.assert:
     that:
-      - mxbi_raspi_config.stat.exists
-      - mxbi_raspi_config.stat.executable
+      - rpi_mxbi_baseline_raspi_config.stat.exists
+      - rpi_mxbi_baseline_raspi_config.stat.executable
     fail_msg: The target lacks raspi-config and is not a supported Raspberry Pi OS system.
