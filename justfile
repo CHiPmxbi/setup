@@ -8,11 +8,11 @@ install:
 
 # Lint playbooks and roles.
 lint:
-    ansible-lint site.yml experiment.yml
+    ansible-lint rpi-mxbi-baseline.yml experiment.yml
 
 # Check both playbooks for syntax errors.
 syntax:
-    ansible-playbook site.yml --syntax-check
+    ansible-playbook rpi-mxbi-baseline.yml --syntax-check
     ansible-playbook experiment.yml --syntax-check
 
 # Run all local static checks.
@@ -22,17 +22,17 @@ check: lint syntax
 inventory:
     ansible-inventory --graph
 
-# List tags provided by the shared-workstation playbook.
+# List tags provided by the baseline playbook.
 tags:
-    ansible-playbook site.yml --list-tags
+    ansible-playbook rpi-mxbi-baseline.yml --list-tags
 
-# Configure a host or group; defaults to all mxbi hosts.
-site target='mxbi' *args:
-    ansible-playbook site.yml --limit {{target}} --ask-vault-pass {{args}}
+# Prepare the baseline for a host or group; defaults to all mxbi hosts.
+baseline target='mxbi' *args:
+    ansible-playbook rpi-mxbi-baseline.yml --limit {{target}} --ask-vault-pass {{args}}
 
-# Check shared-workstation configuration for a host or group; defaults to all mxbi hosts.
-site-check target='mxbi' *args:
-    ansible-playbook site.yml --limit {{target}} --ask-vault-pass --check --diff {{args}}
+# Check the baseline for a host or group; defaults to all mxbi hosts.
+baseline-check target='mxbi' *args:
+    ansible-playbook rpi-mxbi-baseline.yml --limit {{target}} --ask-vault-pass --check --diff {{args}}
 
 # Deploy an experiment to a host or group; extra arguments are passed to Ansible.
 exp target *args:
@@ -44,4 +44,4 @@ exp-check target *args:
 
 # Configure the Samba mount for a host or group; extra arguments are passed to Ansible.
 samba target *args:
-    ansible-playbook site.yml --limit {{target}} --tags samba --ask-vault-pass {{args}}
+    ansible-playbook rpi-mxbi-baseline.yml --limit {{target}} --tags samba --ask-vault-pass {{args}}

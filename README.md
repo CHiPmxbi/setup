@@ -25,9 +25,9 @@ just install
 just check
 just inventory
 just tags
-just site
-just site mxbi1 --tags shell
-just site-check mxbi1
+just baseline
+just baseline mxbi1 --tags shell
+just baseline-check mxbi1
 just exp mxbi5
 just exp-check group1
 just samba mxbi5
@@ -54,7 +54,7 @@ Git and is loaded only by the `github` tag.
 
 cogmoteGO email configuration is enabled during full provisioning. Set
 `mxbi_cogmotego_email_address`, `mxbi_cogmotego_email_smtp_host`, and
-`mxbi_cogmotego_email_smtp_port` in `roles/mxbi/defaults/main.yml`, then create
+`mxbi_cogmotego_email_smtp_port` in `roles/rpi_mxbi_baseline/defaults/main.yml`, then create
 and encrypt its password Vault:
 
 ```nu
@@ -98,7 +98,7 @@ subsequently changes.
 ## Provisioning
 
 ```nu
-ansible-playbook site.yml --ask-vault-pass
+ansible-playbook rpi-mxbi-baseline.yml --ask-vault-pass
 ```
 
 The playbook installs system packages, HiFiBerry Amp2 configuration, Linuxbrew,
@@ -107,7 +107,7 @@ MediaMTX, and Raspberry Pi VNC. Run the playbook again after provisioning to
 confirm it is idempotent.
 
 ```nu
-ansible-playbook site.yml --ask-vault-pass --check --diff
+ansible-playbook rpi-mxbi-baseline.yml --ask-vault-pass --check --diff
 ```
 
 ## Selective Runs
@@ -115,17 +115,17 @@ ansible-playbook site.yml --ask-vault-pass --check --diff
 List available functional tags:
 
 ```nu
-ansible-playbook site.yml --list-tags
+ansible-playbook rpi-mxbi-baseline.yml --list-tags
 ```
 
 Run one component or several components on a test host:
 
 ```nu
-ansible-playbook site.yml --limit mxbi1 --tags shell
-ansible-playbook site.yml --limit mxbi1 --tags 'system,homebrew'
-ansible-playbook site.yml --limit mxbi1 --tags github --ask-vault-pass
-ansible-playbook site.yml --limit mxbi5 --tags cogmotego_email --ask-vault-pass
-ansible-playbook site.yml --limit mxbi5 --tags samba --ask-vault-pass
+ansible-playbook rpi-mxbi-baseline.yml --limit mxbi1 --tags shell
+ansible-playbook rpi-mxbi-baseline.yml --limit mxbi1 --tags 'system,homebrew'
+ansible-playbook rpi-mxbi-baseline.yml --limit mxbi1 --tags github --ask-vault-pass
+ansible-playbook rpi-mxbi-baseline.yml --limit mxbi5 --tags cogmotego_email --ask-vault-pass
+ansible-playbook rpi-mxbi-baseline.yml --limit mxbi5 --tags samba --ask-vault-pass
 ```
 
 Available tags are `system`, `hifiberry`, `homebrew`, `github`, `shell`,
@@ -141,8 +141,8 @@ cogmoteGO trusted Samba root and the cogmoteGO user service is restarted.
 
 ## Experiment Deployment
 
-`experiment.yml` is a separate experiment deployment entrypoint. It assumes
-Samba, GitHub SSH, cogmoteGO, and uv have already been configured; it does not
+`experiment.yml` is separate from `rpi-mxbi-baseline.yml`. It assumes Samba,
+GitHub SSH, cogmoteGO, and uv have already been configured; it does not
 provision any of them.
 
 Experiment groups are children of `mxbi_experiments` in the inventory. `group1`

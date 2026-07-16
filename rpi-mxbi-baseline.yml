@@ -1,0 +1,7 @@
+---
+- name: Prepare the mxbi Raspberry Pi baseline
+  hosts: mxbi
+  gather_facts: true
+
+  roles:
+    - role: rpi_mxbi_baseline
