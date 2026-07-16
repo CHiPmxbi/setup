@@ -1,0 +1,14 @@
+# 由 Ansible 管理，请勿直接在目标机修改。
+[Unit]
+Description=mxbi {{ mxbi_experiment_name }} experiment
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+WorkingDirectory={{ experiment_path }}
+ExecStart={{ experiment_homebrew_prefix }}/bin/uv run main.py
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=default.target

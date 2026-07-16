@@ -1,0 +1,7 @@
+---
+- name: Deploy mxbi experiments
+  hosts: mxbi_experiments
+  gather_facts: true
+
+  roles:
+    - role: experiment

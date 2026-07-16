@@ -1,0 +1,415 @@
+---
+- name: Validate the experiment configuration
+  ansible.builtin.assert:
+    that:
+      - experiment_user != 'root'
+      - experiment_shared_config_repository is match('^git@[^:]+:[^/]+/.+\\.git$')
+      - mxbi_experiment_name is match('^[A-Za-z0-9][A-Za-z0-9_-]*$')
+      - mxbi_experiment_repository is match('^git@[^:]+:[^/]+/.+\\.git$')
+      - mxbi_experiment_cogmotego_email_recipients is defined
+      - mxbi_experiment_cogmotego_email_recipients is sequence
+      - mxbi_experiment_cogmotego_email_recipients is not string
+      - >-
+        mxbi_experiment_cogmotego_email_recipients | map('lower') | unique | length
+        == mxbi_experiment_cogmotego_email_recipients | length
+      - experiment_cogmotego_root_name | length > 0
+    fail_msg: The experiment configuration is invalid.
+
+- name: Validate the experiment email recipients
+  ansible.builtin.assert:
+    that:
+      - item is string
+      - item == item | trim
+      - "'@' in item"
+    fail_msg: "Invalid experiment email recipient: {{ item }}"
+  loop: "{{ mxbi_experiment_cogmotego_email_recipients }}"
+
+- name: Read target user information
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ experiment_user }}"
+
+- name: Store target user paths and IDs
+  ansible.builtin.set_fact:
+    experiment_home: "{{ ansible_facts.getent_passwd[experiment_user][4] }}"
+    experiment_uid: "{{ ansible_facts.getent_passwd[experiment_user][1] }}"
+    experiment_gid: "{{ ansible_facts.getent_passwd[experiment_user][2] }}"
+    experiment_path: "{{ ansible_facts.getent_passwd[experiment_user][4] }}/{{ mxbi_experiment_name }}"
+
+- name: Read the target user's primary group
+  ansible.builtin.getent:
+    database: group
+    key: "{{ experiment_gid }}"
+
+- name: Store the target user's primary group name
+  ansible.builtin.set_fact:
+    experiment_group: "{{ ansible_facts.getent_group.keys() | first }}"
+
+- name: Create the user configuration directory
+  become: true
+  ansible.builtin.file:
+    path: "{{ experiment_home }}/.config"
+    state: directory
+    owner: "{{ experiment_user }}"
+    group: "{{ experiment_group }}"
+    mode: '0755'
+
+- name: Check whether the shared configuration path exists
+  ansible.builtin.stat:
+    path: "{{ experiment_home }}/.config/mxbi"
+  register: experiment_shared_config_path
+  check_mode: false
+
+- name: Check whether the shared configuration repository exists
+  ansible.builtin.stat:
+    path: "{{ experiment_home }}/.config/mxbi/.git"
+  register: experiment_shared_config_git_directory
+  check_mode: false
+
+- name: Ensure the shared configuration path is a Git repository
+  ansible.builtin.assert:
+    that:
+      - >-
+        not experiment_shared_config_path.stat.exists
+        or experiment_shared_config_git_directory.stat.exists
+    fail_msg: >-
+      {{ experiment_home }}/.config/mxbi exists but is not a Git repository;
+      refusing to overwrite it.
+
+- name: Check for local shared configuration changes
+  become: true
+  become_user: "{{ experiment_user }}"
+  ansible.builtin.command:
+    argv:
+      - git
+      - -C
+      - "{{ experiment_home }}/.config/mxbi"
+      - status
+      - --porcelain
+      - --untracked-files=no
+  register: experiment_shared_config_status
+  changed_when: false
+  check_mode: false
+  when: experiment_shared_config_git_directory.stat.exists
+
+- name: Determine whether the shared configuration has local changes
+  ansible.builtin.set_fact:
+    experiment_shared_config_has_local_changes: >-
+      {{ experiment_shared_config_status.stdout | default('') | trim | length > 0 }}
+
+- name: Report local shared configuration changes
+  ansible.builtin.debug:
+    msg: >-
+      Shared configuration repository {{ experiment_home }}/.config/mxbi has local
+      tracked changes; skipping its main branch update.
+  when: experiment_shared_config_has_local_changes
+
+- name: Clone or update the shared configuration repository
+  become: true
+  become_user: "{{ experiment_user }}"
+  ansible.builtin.git:
+    repo: "{{ experiment_shared_config_repository }}"
+    dest: "{{ experiment_home }}/.config/mxbi"
+    version: "{{ experiment_shared_config_version }}"
+    update: true
+    force: false
+  environment:
+    HOME: "{{ experiment_home }}"
+    GIT_SSH_COMMAND: ssh -o BatchMode=yes -o ConnectTimeout=15
+    GIT_CONFIG_COUNT: '1'
+    GIT_CONFIG_KEY_0: url.git@github.com:.insteadOf
+    GIT_CONFIG_VALUE_0: https://github.com/
+  when: not experiment_shared_config_has_local_changes
+
+- name: Check the required experiment executables
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ experiment_home }}/.local/bin/cogmoteGO"
+    - "{{ experiment_homebrew_prefix }}/bin/uv"
+  register: experiment_executables
+  check_mode: false
+
+- name: Ensure the required experiment executables are available
+  ansible.builtin.assert:
+    that: item.stat.exists and item.stat.executable
+    fail_msg: "Required executable is unavailable: {{ item.item }}"
+  loop: "{{ experiment_executables.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Check whether the experiment repository already exists
+  ansible.builtin.stat:
+    path: "{{ experiment_path }}/.git"
+  register: experiment_repository_git_directory
+  check_mode: false
+
+- name: Check for local experiment repository changes
+  become: true
+  become_user: "{{ experiment_user }}"
+  ansible.builtin.command:
+    argv:
+      - git
+      - -C
+      - "{{ experiment_path }}"
+      - status
+      - --porcelain
+      - --untracked-files=no
+  register: experiment_repository_status
+  changed_when: false
+  check_mode: false
+  when: experiment_repository_git_directory.stat.exists
+
+- name: Determine whether the experiment repository has local changes
+  ansible.builtin.set_fact:
+    experiment_repository_has_local_changes: >-
+      {{ experiment_repository_status.stdout | default('') | trim | length > 0 }}
+
+- name: Report local experiment repository changes
+  ansible.builtin.debug:
+    msg: >-
+      Experiment repository {{ experiment_path }} has local tracked changes; skipping
+      its main branch update.
+  when: experiment_repository_has_local_changes
+
+- name: Clone or update the experiment repository
+  become: true
+  become_user: "{{ experiment_user }}"
+  ansible.builtin.git:
+    repo: "{{ mxbi_experiment_repository }}"
+    dest: "{{ experiment_path }}"
+    version: "{{ experiment_repository_version }}"
+    update: true
+    force: false
+  environment:
+    HOME: "{{ experiment_home }}"
+    GIT_SSH_COMMAND: ssh -o BatchMode=yes -o ConnectTimeout=15
+    GIT_CONFIG_COUNT: '1'
+    GIT_CONFIG_KEY_0: url.git@github.com:.insteadOf
+    GIT_CONFIG_VALUE_0: https://github.com/
+  when: not experiment_repository_has_local_changes
+
+- name: Create the experiment data directory
+  become: true
+  ansible.builtin.file:
+    path: "{{ experiment_path }}/data"
+    state: directory
+    owner: "{{ experiment_user }}"
+    group: "{{ experiment_group }}"
+    mode: '0755'
+
+- name: Check the cogmoteGO configuration file
+  become: true
+  become_user: "{{ experiment_user }}"
+  ansible.builtin.stat:
+    path: "{{ experiment_home }}/.config/cogmoteGO/config.json"
+  register: experiment_cogmotego_config
+  check_mode: false
+
+- name: Read the cogmoteGO configuration
+  become: true
+  become_user: "{{ experiment_user }}"
+  ansible.builtin.slurp:
+    src: "{{ experiment_home }}/.config/cogmoteGO/config.json"
+  register: experiment_cogmotego_config_content
+  changed_when: false
+  when: experiment_cogmotego_config.stat.exists
+
+- name: Store the configured cogmoteGO source roots
+  ansible.builtin.set_fact:
+    experiment_cogmotego_source_roots: >-
+      {{
+        (experiment_cogmotego_config_content.content | b64decode | from_json)
+        .get('backup', {})
+        .get('source_roots', [])
+        if experiment_cogmotego_config.stat.exists
+        else []
+      }}
+
+- name: Find the configured cogmoteGO source root
+  ansible.builtin.set_fact:
+    experiment_cogmotego_source_root_current: >-
+      {{
+        experiment_cogmotego_source_roots
+        | selectattr('id', 'equalto', experiment_cogmotego_root_name)
+        | list
+      }}
+
+- name: Determine whether the cogmoteGO source root needs an update
+  ansible.builtin.set_fact:
+    experiment_cogmotego_source_root_needs_update: >-
+      {{
+        experiment_cogmotego_source_root_current | length != 1
+        or (experiment_cogmotego_source_root_current | first).path != experiment_path ~ '/data'
+      }}
+
+- name: Remove the outdated cogmoteGO source root
+  become: true
+  become_user: "{{ experiment_user }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ experiment_home }}/.local/bin/cogmoteGO"
+      - backup
+      - roots
+      - remove
+      - source
+      - "{{ experiment_cogmotego_root_name }}"
+  environment:
+    HOME: "{{ experiment_home }}"
+    PATH: "{{ experiment_home }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - experiment_cogmotego_source_root_needs_update
+    - experiment_cogmotego_source_root_current | length > 0
+  notify: Reload and restart the cogmoteGO user service
+
+- name: Add the experiment data directory as a cogmoteGO source root
+  become: true
+  become_user: "{{ experiment_user }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ experiment_home }}/.local/bin/cogmoteGO"
+      - backup
+      - roots
+      - add
+      - source
+      - "{{ experiment_cogmotego_root_name }}"
+      - "{{ experiment_path }}/data"
+  environment:
+    HOME: "{{ experiment_home }}"
+    PATH: "{{ experiment_home }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - experiment_cogmotego_source_root_needs_update
+  notify: Reload and restart the cogmoteGO user service
+
+- name: Report the cogmoteGO source root update in check mode
+  ansible.builtin.debug:
+    msg: >-
+      cogmoteGO source root {{ experiment_cogmotego_root_name }} would point to
+      {{ experiment_path }}/data.
+  changed_when: true
+  when:
+    - ansible_check_mode
+    - experiment_cogmotego_source_root_needs_update
+
+- name: Store the configured cogmoteGO email recipients
+  ansible.builtin.set_fact:
+    experiment_cogmotego_email_recipients_current: >-
+      {{
+        (experiment_cogmotego_config_content.content | b64decode | from_json)
+        .get('email', {})
+        .get('recipients', [])
+        if experiment_cogmotego_config.stat.exists
+        else []
+      }}
+    experiment_cogmotego_email_recipients_desired: >-
+      {{ mxbi_experiment_cogmotego_email_recipients | map('lower') | list }}
+
+- name: Determine whether the cogmoteGO email recipients need an update
+  ansible.builtin.set_fact:
+    experiment_cogmotego_email_recipients_need_update: >-
+      {{
+        experiment_cogmotego_email_recipients_current | map('lower') | sort | list
+        != experiment_cogmotego_email_recipients_desired | sort | list
+      }}
+    experiment_cogmotego_email_recipients_have_duplicates: >-
+      {{
+        experiment_cogmotego_email_recipients_current | map('lower') | unique | length
+        != experiment_cogmotego_email_recipients_current | length
+      }}
+
+- name: Remove obsolete cogmoteGO email recipients
+  become: true
+  become_user: "{{ experiment_user }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ experiment_home }}/.local/bin/cogmoteGO"
+      - email
+      - recipients
+      - remove
+      - "{{ item }}"
+  environment:
+    HOME: "{{ experiment_home }}"
+    XDG_RUNTIME_DIR: "/run/user/{{ experiment_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ experiment_uid }}/bus"
+  changed_when: true
+  loop: "{{ experiment_cogmotego_email_recipients_current }}"
+  loop_control:
+    label: "{{ item }}"
+  when:
+    - not ansible_check_mode
+    - >-
+      item | lower not in experiment_cogmotego_email_recipients_desired
+      or experiment_cogmotego_email_recipients_have_duplicates
+  notify: Reload and restart the cogmoteGO user service
+
+- name: Add missing cogmoteGO email recipients
+  become: true
+  become_user: "{{ experiment_user }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ experiment_home }}/.local/bin/cogmoteGO"
+      - email
+      - recipients
+      - add
+      - "{{ item }}"
+  environment:
+    HOME: "{{ experiment_home }}"
+    XDG_RUNTIME_DIR: "/run/user/{{ experiment_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ experiment_uid }}/bus"
+  changed_when: true
+  loop: "{{ mxbi_experiment_cogmotego_email_recipients }}"
+  loop_control:
+    label: "{{ item }}"
+  when:
+    - not ansible_check_mode
+    - >-
+      item | lower not in experiment_cogmotego_email_recipients_current | map('lower') | list
+      or experiment_cogmotego_email_recipients_have_duplicates
+  notify: Reload and restart the cogmoteGO user service
+
+- name: Report the cogmoteGO email recipients update in check mode
+  ansible.builtin.debug:
+    msg: >-
+      cogmoteGO email recipients would change from
+      {{ experiment_cogmotego_email_recipients_current | join(', ') | default('(none)', true) }} to
+      {{ mxbi_experiment_cogmotego_email_recipients | join(', ') | default('(none)', true) }}.
+  changed_when: true
+  when:
+    - ansible_check_mode
+    - experiment_cogmotego_email_recipients_need_update
+
+- name: Create the user systemd directory
+  become: true
+  ansible.builtin.file:
+    path: "{{ experiment_home }}/.config/systemd/user"
+    state: directory
+    owner: "{{ experiment_user }}"
+    group: "{{ experiment_group }}"
+    mode: '0755'
+
+- name: Deploy the experiment user service
+  become: true
+  ansible.builtin.template:
+    src: mxbi-experiment.service.j2
+    dest: "{{ experiment_home }}/.config/systemd/user/{{ experiment_service_name }}"
+    owner: "{{ experiment_user }}"
+    group: "{{ experiment_group }}"
+    mode: '0644'
+
+- name: Ensure the experiment user service is enabled and stopped
+  become: true
+  become_user: "{{ experiment_user }}"
+  ansible.builtin.systemd_service:
+    name: "{{ experiment_service_name }}"
+    scope: user
+    daemon_reload: true
+    enabled: true
+    state: stopped
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ experiment_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ experiment_uid }}/bus"
+  when: not ansible_check_mode

@@ -2,9 +2,18 @@
 all:
   children:
     mxbi:
-      hosts:
-        mxbi[1:10]:
-        mxbidev:
+      children:
+        mxbi_experiments:
+          children:
+            group1:
+              hosts:
+                mxbi[1:5]:
+            group2:
+              hosts:
+                mxbi[6:10]:
+        mxbi_development:
+          hosts:
+            mxbidev:
       vars:
         ansible_ssh_common_args: "-o StrictHostKeyChecking=accept-new"
   vars:

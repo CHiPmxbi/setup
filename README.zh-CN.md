@@ -2,10 +2,7 @@
 
 用于配置和准备 mxbi Raspberry Pi 实验工作站的工具集合。
 
-该仓库应在控制机上运行，包含两个相互独立的部分：
-
-- `ansible/` 声明式管理所有 mxbi 工作站的共享状态。
-- `tools/` 提供不适合 Ansible 的设备级交互式工具。
+该仓库应在控制机上运行；顶层 Ansible playbook 管理所有 mxbi 工作站的共享状态和实验部署。
 
 ## 前置条件
 
@@ -14,7 +11,6 @@
 
 ```nu
 brew install ansible
-cd ansible
 ansible-galaxy collection install -r requirements.yml
 ```
 
@@ -44,7 +40,7 @@ ansible-vault edit vault/mxbi/cogmotego_email.yml
 ```
 
 将 `vault_cogmotego_email_password` 替换为真实邮件密码。该模块不会读取或修改
-cogmoteGO recipients，并会在保存密码前准备 login keyring。
+cogmoteGO recipients，并会在保存密码前准备 login keyring。订阅者由实验部署 playbook 的组变量管理。
 
 可选的 Samba 挂载模块使用独立 Vault。创建并加密密码文件：
 
@@ -109,15 +105,40 @@ ansible-playbook site.yml --limit mxbi5 --tags samba --ask-vault-pass
 加载 Samba Vault 并将
 `//infortrend-storage/Neurowissenschaften/AuditorischeNeurowissenschaften/Projekte/MXBI/data/<主机名>`
 挂载到 `/home/pi/server`。
+挂载启动后，`/home/pi/server` 会以 `mxbi-server` 名称加入 cogmoteGO 的可信 Samba root，并重启
+cogmoteGO 用户服务。
 
-## 交互式工具
+## 部署实验
 
-`tools/` 是独立的 uv 项目，用于设备特定的交互式配置。
+`experiment.yml` 是独立于 `site.yml` 的实验部署入口。它假定 Samba、GitHub SSH、
+cogmoteGO 和 uv 已由既有环境准备好；不会重新配置这些组件。
 
-```nu
-cd tools
-uv run setup_mxbi.py --help
-uv run setup_samba_server.py --help
+库存中的实验组位于 `mxbi_experiments` 下。`group1` 包含 `mxbi1` 到 `mxbi5`，并部署
+`GNGSiD`；`group2` 包含 `mxbi6` 到 `mxbi10`，并部署 `self-initiated-discriminate`。
+组名与实验名相互独立。每个实验组对应一个组变量文件，例如 `group_vars/group1.yml`：
+
+```yaml
+mxbi_experiment_name: GNGSiD
+mxbi_experiment_repository: git@github.com:CHiPmxbi/GNGSiD.git
+mxbi_experiment_cogmotego_email_recipients:
+  - YHu@dpz.eu
 ```
 
-Ansible 配置过程不依赖这些工具。
+将仓库地址替换为实际地址后运行：
+
+```nu
+ansible-playbook experiment.yml --limit group1
+ansible-playbook experiment.yml --limit mxbi1 --check --diff
+```
+
+Playbook 会先将 `git@github.com:CHiPmxbi/mxbi_share_config.git` 同步到 `~/.config/mxbi`，
+再将实验仓库同步到 `~/<exp>`，创建 `~/<exp>/data`，并将其加入 cogmoteGO 的
+`mxbi-data` source 可信 root。它还部署并启用用户级 `mxbi-experiment.service`，在仓库根目录
+执行 `uv run main.py`。部署会停止该服务但保持 enabled，因此需要手动启动；每台设备只有该固定
+名称的实验服务。
+已有仓库会更新到 `main`；若受 Git 跟踪的文件存在未提交改动，Playbook 会保留这些改动、报告
+提示并跳过该仓库的更新。`data/` 等未跟踪文件不会阻止切换。
+共享配置仓库采用相同的本地修改保护；若 `~/.config/mxbi` 已存在但不是 Git 仓库，部署会停止，
+不会覆盖该目录。
+每个实验组通过 `mxbi_experiment_cogmotego_email_recipients` 维护权威订阅者列表；部署时会移除
+不属于当前组的地址，并添加缺失地址。

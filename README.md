@@ -2,12 +2,8 @@
 
 Provisioning and setup tools for mxbi Raspberry Pi workstations.
 
-This repository is intended to run from a control machine. It contains two
-independent areas:
-
-- `ansible/` manages shared workstation state across the mxbi fleet.
-- `tools/` contains interactive utilities for workflows that do not fit
-  declarative Ansible tasks.
+This repository is intended to run from a control machine. Its top-level
+Ansible playbooks manage shared workstation state and experiment deployment.
 
 ## Requirements
 
@@ -17,7 +13,6 @@ already be registered with GitHub.
 
 ```nu
 brew install ansible
-cd ansible
 ansible-galaxy collection install -r requirements.yml
 ```
 
@@ -50,7 +45,8 @@ ansible-vault edit vault/mxbi/cogmotego_email.yml
 
 Replace `vault_cogmotego_email_password` with the actual email password. This
 module prepares the login keyring before storing the password and does not read
-or modify cogmoteGO recipients.
+or modify cogmoteGO recipients. Experiment deployment group variables manage
+recipients.
 
 The optional Samba mount module uses a separate Vault. Create and encrypt its
 password file:
@@ -120,15 +116,48 @@ so full provisioning skips it by default. Explicitly selecting `samba` loads
 its Vault and mounts
 `//infortrend-storage/Neurowissenschaften/AuditorischeNeurowissenschaften/Projekte/MXBI/data/<hostname>`
 at `/home/pi/server`.
+After the mount starts, `/home/pi/server` is added as the `mxbi-server`
+cogmoteGO trusted Samba root and the cogmoteGO user service is restarted.
 
-## Interactive Tools
+## Experiment Deployment
 
-`tools/` is an independent uv project for device-specific interactive setup.
+`experiment.yml` is a separate experiment deployment entrypoint. It assumes
+Samba, GitHub SSH, cogmoteGO, and uv have already been configured; it does not
+provision any of them.
 
-```nu
-cd tools
-uv run setup_mxbi.py --help
-uv run setup_samba_server.py --help
+Experiment groups are children of `mxbi_experiments` in the inventory. `group1`
+contains `mxbi1` through `mxbi5` and deploys `GNGSiD`; `group2` contains
+`mxbi6` through `mxbi10` and deploys `self-initiated-discriminate`. Group names
+are independent from experiment names. Each group has a group-variable file,
+such as `group_vars/group1.yml`:
+
+```yaml
+mxbi_experiment_name: GNGSiD
+mxbi_experiment_repository: git@github.com:CHiPmxbi/GNGSiD.git
+mxbi_experiment_cogmotego_email_recipients:
+  - YHu@dpz.eu
 ```
 
-These tools are not required for Ansible provisioning.
+Replace the repository URL with the actual repository, then run:
+
+```nu
+ansible-playbook experiment.yml --limit group1
+ansible-playbook experiment.yml --limit mxbi1 --check --diff
+```
+
+The playbook first syncs `git@github.com:CHiPmxbi/mxbi_share_config.git` to
+`~/.config/mxbi`, then syncs the experiment repository to `~/<exp>`, creates
+`~/<exp>/data`, and adds it as the cogmoteGO `mxbi-data` source root. It also deploys and enables
+the user-level `mxbi-experiment.service`, which runs `uv run main.py` from the
+repository root. Deployment stops this service while keeping it enabled, so it
+must be started manually. A device has only this fixed-name experiment service.
+Existing repositories are updated to `main`. If Git-tracked files have local,
+uncommitted changes, the playbook preserves them, reports the condition, and
+skips updating that repository. Untracked files such as `data/` do not block a
+switch.
+The shared configuration repository uses the same local-change protection. If
+`~/.config/mxbi` exists but is not a Git repository, deployment stops instead
+of overwriting it.
+Each experiment group maintains its authoritative subscriber list with
+`mxbi_experiment_cogmotego_email_recipients`; deployment removes recipients
+outside the current group and adds missing recipients.
