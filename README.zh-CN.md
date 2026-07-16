@@ -25,6 +25,7 @@ just inventory
 just tags
 just baseline
 just baseline mxbi1 --tags shell
+just baseline-all mxbidev
 just baseline-check mxbi1
 just exp mxbi5
 just exp-check group1

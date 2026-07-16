@@ -30,6 +30,10 @@ tags:
 baseline target='mxbi' *args:
     ansible-playbook rpi-mxbi-baseline.yml --limit {{target}} --ask-vault-pass {{args}}
 
+# Prepare the baseline including opt-in never-tagged tasks.
+baseline-all target='mxbi' *args:
+    ansible-playbook rpi-mxbi-baseline.yml --limit {{target}} --ask-vault-pass {{args}} --tags 'all,never'
+
 # Check the baseline for a host or group; defaults to all mxbi hosts.
 baseline-check target='mxbi' *args:
     ansible-playbook rpi-mxbi-baseline.yml --limit {{target}} --ask-vault-pass --check --diff {{args}}
