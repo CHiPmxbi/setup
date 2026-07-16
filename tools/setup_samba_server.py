@@ -436,15 +436,18 @@ def run_interactive_setup(
     dry_run: bool = False,
     enable_now: bool = False,
     systemd_target: SystemdTarget = "auto",
+    mount_path: str | Path | None = None,
 ) -> SambaMountResult | None:
     """交互收集 Samba 配置并生成或安装挂载 unit。"""
 
     server = _ask(MESSAGES.share)
-    mount_path = _ask(MESSAGES.mount_path, "/mnt/samba")
+    resolved_mount_path = str(mount_path) if mount_path is not None else _ask(
+        MESSAGES.mount_path, "/mnt/samba"
+    )
     domain = _ask(MESSAGES.domain, "")
     username = _ask(MESSAGES.username)
     password = getpass.getpass(f"{MESSAGES.password}: ")
-    config = SambaMountConfig(server, mount_path, domain, username, password)
+    config = SambaMountConfig(server, resolved_mount_path, domain, username, password)
     resolved_target = _resolve_systemd_target(systemd_target)
     result = _render_for_target(config, resolved_target)
 
