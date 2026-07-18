@@ -6,7 +6,7 @@ rpi_mxbi_baseline_cogmotego_installer_url: https://raw.githubusercontent.com/cag
 rpi_mxbi_baseline_cogmotego_email_address: ANW_Setup_Protocol@dpz.eu
 rpi_mxbi_baseline_cogmotego_email_smtp_host: webmail.dpz.eu
 rpi_mxbi_baseline_cogmotego_email_smtp_port: 587
-rpi_mxbi_baseline_github_test_repository: git@github.com:CHiPmxbi/rpi_mxbi_baseline_share_config.git
+rpi_mxbi_baseline_github_test_repository: git@github.com:CHiPmxbi/mxbi_share_config.git
 rpi_mxbi_baseline_maple_font_version: '7.9'
 rpi_mxbi_baseline_maple_font_checksum: sha256:ab88522932cf4015dffeaef6dedc59a22a5fefecdcc6e583d9fcd997da5b7cac
 
