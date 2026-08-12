@@ -1,6 +1,5 @@
 .vault-password
 vault/mxbi/*.yml
-inventory/hosts.yml
 **/*.key
 *.retry
 .ansible/
