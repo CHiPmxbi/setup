@@ -141,6 +141,7 @@ cogmoteGO 和 uv 已由既有环境准备好；不会重新配置这些组件。
 ```yaml
 mxbi_experiment_name: GNGSiD
 mxbi_experiment_repository: git@github.com:CHiPmxbi/GNGSiD.git
+mxbi_experiment_uv_sync: true
 mxbi_experiment_cogmotego_email_recipients:
   - YHu@dpz.eu
 ```
@@ -159,6 +160,12 @@ Playbook 会先将 `git@github.com:CHiPmxbi/mxbi_share_config.git` 同步到 `~/
 名称的实验服务。
 已有仓库会更新到 `main`；若受 Git 跟踪的文件存在未提交改动，Playbook 会保留这些改动、报告
 提示并跳过该仓库的更新。`data/` 等未跟踪文件不会阻止切换。
+实验仓库会递归克隆；每次更新时，所有子模块都会跟随 `.gitmodules` 配置的分支更新到最新提交，
+未配置分支时则跟随远端默认分支。已初始化子模块中的受跟踪本地修改与主仓库修改采用相同的保护
+策略。
+对于基于 uv 的实验，设置 `mxbi_experiment_uv_sync: true`。仓库同步后，每次部署都会以实验
+用户在仓库根目录执行 `uv sync --locked`。该选项默认为 `false`；check mode 只报告待执行的
+同步。若 `uv.lock` 缺失或过期，部署会失败，而不会在设备上修改仓库。
 共享配置仓库采用相同的本地修改保护；若 `~/.config/mxbi` 已存在但不是 Git 仓库，部署会停止，
 不会覆盖该目录。
 每个实验组通过 `mxbi_experiment_cogmotego_email_recipients` 维护权威订阅者列表；部署时会移除

@@ -157,6 +157,7 @@ such as `group_vars/group1.yml`:
 ```yaml
 mxbi_experiment_name: GNGSiD
 mxbi_experiment_repository: git@github.com:CHiPmxbi/GNGSiD.git
+mxbi_experiment_uv_sync: true
 mxbi_experiment_cogmotego_email_recipients:
   - YHu@dpz.eu
 ```
@@ -177,7 +178,16 @@ must be started manually. A device has only this fixed-name experiment service.
 Existing repositories are updated to `main`. If Git-tracked files have local,
 uncommitted changes, the playbook preserves them, reports the condition, and
 skips updating that repository. Untracked files such as `data/` do not block a
-switch.
+switch. Experiment repositories are cloned recursively. On every update, all
+submodules follow the latest commit on the branch configured in `.gitmodules`,
+or the remote default branch when no branch is configured. Local tracked changes
+in initialized submodules receive the same protection as changes in the parent
+repository.
+For uv-based experiments, set `mxbi_experiment_uv_sync: true`. After repository
+synchronization, every deployment runs `uv sync --locked` from the experiment
+root as the experiment user. The option defaults to `false`; check mode only
+reports the pending synchronization. A missing or stale `uv.lock` causes the
+deployment to fail instead of modifying the repository on the device.
 The shared configuration repository uses the same local-change protection. If
 `~/.config/mxbi` exists but is not a Git repository, deployment stops instead
 of overwriting it.

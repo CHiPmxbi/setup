@@ -6,6 +6,7 @@
       - experiment_shared_config_repository is match('^git@[^:]+:[^/]+/.+\\.git$')
       - mxbi_experiment_name is match('^[A-Za-z0-9][A-Za-z0-9_-]*$')
       - mxbi_experiment_repository is match('^git@[^:]+:[^/]+/.+\\.git$')
+      - experiment_uv_sync is boolean
       - mxbi_experiment_cogmotego_email_recipients is defined
       - mxbi_experiment_cogmotego_email_recipients is sequence
       - mxbi_experiment_cogmotego_email_recipients is not string
@@ -155,7 +156,26 @@
       - status
       - --porcelain
       - --untracked-files=no
+      - --ignore-submodules=all
   register: experiment_repository_status
+  changed_when: false
+  check_mode: false
+  when: experiment_repository_git_directory.stat.exists
+
+- name: Check for local experiment submodule changes
+  become: true
+  become_user: "{{ experiment_user }}"
+  ansible.builtin.command:
+    argv:
+      - git
+      - -C
+      - "{{ experiment_path }}"
+      - submodule
+      - foreach
+      - --quiet
+      - --recursive
+      - git status --porcelain --untracked-files=no --ignore-submodules=all
+  register: experiment_submodule_status
   changed_when: false
   check_mode: false
   when: experiment_repository_git_directory.stat.exists
@@ -163,13 +183,16 @@
 - name: Determine whether the experiment repository has local changes
   ansible.builtin.set_fact:
     experiment_repository_has_local_changes: >-
-      {{ experiment_repository_status.stdout | default('') | trim | length > 0 }}
+      {{
+        experiment_repository_status.stdout | default('') | trim | length > 0
+        or experiment_submodule_status.stdout | default('') | trim | length > 0
+      }}
 
 - name: Report local experiment repository changes
   ansible.builtin.debug:
     msg: >-
-      Experiment repository {{ experiment_path }} has local tracked changes; skipping
-      its main branch update.
+      Experiment repository {{ experiment_path }} or one of its initialized submodules
+      has local tracked changes; skipping its main branch and submodule update.
   when: experiment_repository_has_local_changes
 
 - name: Clone or update the experiment repository
@@ -181,6 +204,8 @@
     version: "{{ experiment_repository_version }}"
     update: true
     force: false
+    recursive: true
+    track_submodules: true
   environment:
     HOME: "{{ experiment_home }}"
     GIT_SSH_COMMAND: ssh -o BatchMode=yes -o ConnectTimeout=15
@@ -188,6 +213,32 @@
     GIT_CONFIG_KEY_0: url.git@github.com:.insteadOf
     GIT_CONFIG_VALUE_0: https://github.com/
   when: not experiment_repository_has_local_changes
+
+- name: Synchronize the experiment uv environment
+  become: true
+  become_user: "{{ experiment_user }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ experiment_homebrew_prefix }}/bin/uv"
+      - sync
+      - --locked
+    chdir: "{{ experiment_path }}"
+  environment:
+    HOME: "{{ experiment_home }}"
+  changed_when: true
+  when:
+    - experiment_uv_sync
+    - not ansible_check_mode
+
+- name: Report the experiment uv environment synchronization in check mode
+  ansible.builtin.debug:
+    msg: >-
+      The uv environment in {{ experiment_path }} would be synchronized from the
+      committed lock file.
+  changed_when: true
+  when:
+    - experiment_uv_sync
+    - ansible_check_mode
 
 - name: Create the experiment data directory
   become: true

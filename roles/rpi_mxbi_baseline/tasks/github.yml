@@ -32,12 +32,13 @@
     group: "{{ rpi_mxbi_baseline_group }}"
     mode: '0600'
 
-- name: Pin the GitHub SSH host keys
+- name: Pin the GitHub SSH-over-HTTPS host keys
   become: true
   become_user: "{{ rpi_mxbi_baseline_user }}"
   ansible.builtin.known_hosts:
-    name: github.com
-    key: "{{ item }}"
+    name: "[ssh.github.com]:443"
+    key: >-
+      {{ item | regex_replace('^github\.com ', '[ssh.github.com]:443 ') }}
     path: "{{ rpi_mxbi_baseline_home }}/.ssh/known_hosts"
     state: present
   loop: "{{ github_ssh_host_keys }}"
@@ -54,6 +55,9 @@
     marker: '# {mark} mxbi GitHub SSH'
     block: |
       Host github.com
+        HostName ssh.github.com
+        Port 443
+        User git
         IdentityFile ~/{{ rpi_mxbi_baseline_github_ssh_private_key_path }}
         IdentitiesOnly yes
 
