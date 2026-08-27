@@ -1,178 +1,175 @@
 # CHiPmxbi Setup
 
-用于配置和准备 mxbi Raspberry Pi 实验工作站的工具集合。
+在控制机上配置和部署 mxbi 实验工作站的工具集。装好后通过 `just` 一键完成设备配置、实验部署与日常更新。
 
-该仓库应在控制机上运行；顶层 Ansible playbook 管理所有 mxbi 工作站的共享状态和实验部署。
+## 安装与初次配置
 
-## 前置条件
+### 前置条件
 
-控制机需要安装 Ansible，并且能够通过 SSH 连接目标 Raspberry Pi。目标账户必须是
-具有 sudo 权限的非 root 用户，其 GitHub SSH 公钥必须已经注册到 GitHub。
+- 控制机：macOS / Linux（Ansible 不支持 Windows）。
+- 已安装 Ansible 与 just，且能通过 SSH 连接目标机。
 
-```nu
+> 该仓库只在控制机运行，请勿克隆到目标设备上。
+
+### 安装 Ansible 与 collections
+
+```sh
+# macOS（Homebrew）
 brew install ansible ansible-lint just
+
+# Debian / Ubuntu 等 Linux（ansible 亦可用 pipx 安装）
+sudo apt install ansible
+pipx install ansible-lint
+```
+
+`just`（命令运行器）：brew / apt 可用时优先，否则从 <https://github.com/casey/just> 安装。
+
+```sh
 ansible-galaxy collection install -r requirements.yml
 ```
 
-## 常用命令
+### 首次配置（管理员）
 
-顶层 `justfile` 为常用操作提供简短命令：
+以下文件均已被 Git 忽略，只存在于本机；Vault 文件必须保持加密，禁止以明文写入或提交。
 
-```nu
-just install
-just check
-just inventory
-just tags
-just baseline
-just baseline mxbi1 --tags shell
-just baseline-all mxbidev
-just baseline-check mxbi1
-just exp mxbi5
-just exp-check group1
-just samba mxbi5
-just update
-just update mxbi8
+#### 1. Inventory
+
+```sh
+cp inventory/hosts.yml.example inventory/hosts.yml
 ```
 
-配方参数会直接传递给 Ansible。读取 Vault 的配方仍由 Ansible 交互式提示输入密码。
-`just update` 只升级 APT 与 Homebrew 包，不读取任何 Vault，因此仅提示 sudo 密码。
+默认划分：`group1` = `mxbi[1:5]`，`group2` = `mxbi[6:10]`，另有开发机 `mxbidev`。主机名即 OpenSSH 别名，连接参数由 `~/.ssh/config` 的 `Host mxbi*` 统一提供（`HostName %h.local`、用户 `pi`、`IdentityFile ~/.ssh/mxbi`），inventory 不重复这些信息；inventory 已启用 `StrictHostKeyChecking=accept-new`（首次连接自动记录主机密钥，已记录密钥变化则失败）。
 
-## 配置
+#### 2. GitHub 凭据 Vault（`github` tag 时加载）
 
-创建 inventory 和加密的 Vault 变量：
-
-```nu
-cp inventory/hosts.yml.example inventory/hosts.yml
+```sh
 cp vault/mxbi/github.yml.example vault/mxbi/github.yml
 ansible-vault encrypt vault/mxbi/github.yml
 ansible-vault edit vault/mxbi/github.yml
 ```
 
-执行前编辑 `inventory/hosts.yml`，再通过 `ansible-vault edit` 替换
-`vault_github_ssh_private_key` 中的占位内容。禁止将私钥以明文写入或提交到仓库。本地
-`vault/mxbi/github.yml` 已被 Git 忽略，并且仅由 `github` tag 加载。
+用 `ansible-vault edit` 替换 `vault_github_ssh_private_key` 的占位内容。
 
-完整配置默认启用 cogmoteGO email。先在 `roles/rpi_mxbi_baseline/defaults/main.yml` 中设置
-`rpi_mxbi_baseline_cogmotego_email_address`、
-`rpi_mxbi_baseline_cogmotego_email_smtp_host` 和
-`rpi_mxbi_baseline_cogmotego_email_smtp_port`，再创建并加密密码 Vault：
+#### 3. cogmoteGO email Vault（默认启用）
 
-```nu
+先确认 `roles/rpi_mxbi_baseline/defaults/main.yml` 中的三个变量（已有默认值）：
+
+- `rpi_mxbi_baseline_cogmotego_email_address`
+- `rpi_mxbi_baseline_cogmotego_email_smtp_host`
+- `rpi_mxbi_baseline_cogmotego_email_smtp_port`
+
+然后创建并加密密码 Vault：
+
+```sh
 cp vault/mxbi/cogmotego_email.yml.example vault/mxbi/cogmotego_email.yml
 ansible-vault encrypt vault/mxbi/cogmotego_email.yml
 ansible-vault edit vault/mxbi/cogmotego_email.yml
 ```
 
-将 `vault_cogmotego_email_password` 替换为真实邮件密码。该模块不会读取或修改
-cogmoteGO recipients，并会在保存密码前准备 login keyring。订阅者由实验部署 playbook 的组变量管理。
+将 `vault_cogmotego_email_password` 替换为真实邮件密码。该模块不读取或修改 cogmoteGO recipients（订阅者由实验部署的组变量管理），保存密码前会先准备 login keyring。
 
-可选的 Samba 挂载模块使用独立 Vault。创建并加密密码文件：
+#### 4. Samba Vault（可选，`samba` tag 时加载）
 
-```nu
+```sh
 cp vault/mxbi/samba.yml.example vault/mxbi/samba.yml
 ansible-vault encrypt vault/mxbi/samba.yml
 ansible-vault edit vault/mxbi/samba.yml
 ```
 
-将 `vault_samba_password` 替换为 `anw-mxbisetup` 的真实密码。Samba Vault 仅在显式使用
-`samba` tag 时加载。
+将 `vault_samba_password` 替换为 `anw-mxbisetup` 的真实密码。
 
-Inventory 中的主机名直接使用 OpenSSH 别名。当前 `~/.ssh/config` 通过 `Host mxbi*`
-统一提供 `HostName %h.local`、用户 `pi` 和 `IdentityFile ~/.ssh/mxbi`，因此 inventory
-无需重复连接参数：
+## 常用命令
+
+配置就绪后，日常就两条命令，覆盖绝大部分操作：
+
+### 1. 完整配置设备
+
+```sh
+# 全部 mxbi 设备（默认目标）
+just baseline-all
+# 只配置某一台
+just baseline-all mxbi8
+```
+
+对 mxbi 设备做一次完整配置：系统软件、HiFiBerry Amp2、Linuxbrew、GitHub SSH 凭据、Zsh、cogmoteGO 及 email、MediaMTX、VNC，并包含默认不执行的 `never` tag（Samba）。需要 Vault 密码；幂等，可重复运行；只想查看将做的改动用 `just baseline-check mxbi1`。
+
+### 2. 部署实验
+
+```sh
+# 全部设备
+just exp mxbi
+# 只部署某一台
+just exp mxbi8
+```
+
+按组变量把实验部署到设备。设备需先完成 baseline；预览改动用 `just exp-check mxbi1`。
+
+`experiment.yml` 是实验部署入口，假定 Samba、GitHub SSH、cogmoteGO 与 uv 已就绪，不会重新配置这些组件。实验组位于 inventory 的 `mxbi_experiments` 之下，组名与实验名相互独立；每个实验组对应一个组变量文件，例如 `group_vars/group1.yml`：
 
 ```yaml
-mxbi:
-  hosts:
-    mxbi1:
-    mxbi2:
-```
-
-inventory 启用了 `StrictHostKeyChecking=accept-new`：Ansible 首次连接未知主机时会自动记录其密钥；已记录主机的密钥发生变化时则会失败。
-
-## 配置目标机
-
-```nu
-ansible-playbook rpi-mxbi-baseline.yml --ask-vault-pass
-```
-
-Playbook 会配置系统软件、HiFiBerry Amp2、Linuxbrew、GitHub SSH、Zsh、
-cogmoteGO 及其 email、MediaMTX 和 Raspberry Pi VNC。首次完成后可再次以检查模式运行，
-确认配置具备幂等性：
-
-```nu
-ansible-playbook rpi-mxbi-baseline.yml --ask-vault-pass --check --diff
-```
-
-## 选择性执行
-
-查看可用的功能 tags：
-
-```nu
-ansible-playbook rpi-mxbi-baseline.yml --list-tags
-```
-
-在测试机上执行一个或多个功能：
-
-```nu
-ansible-playbook rpi-mxbi-baseline.yml --limit mxbi1 --tags shell
-ansible-playbook rpi-mxbi-baseline.yml --limit mxbi1 --tags 'system,homebrew'
-ansible-playbook rpi-mxbi-baseline.yml --limit mxbi1 --tags github --ask-vault-pass
-ansible-playbook rpi-mxbi-baseline.yml --limit mxbi5 --tags cogmotego_email --ask-vault-pass
-ansible-playbook rpi-mxbi-baseline.yml --limit mxbi5 --tags samba --ask-vault-pass
-ansible-playbook rpi-mxbi-baseline.yml --limit mxbi8 --tags update
-```
-
-可用 tags 包括 `system`、`hifiberry`、`homebrew`、`github`、`shell`、
-`cogmotego`、`cogmotego_email`、`mediamtx`、`desktop`、`samba` 和 `update`。
-`update` tag 只执行 APT 缓存刷新与安全升级，以及仓库管理的 Homebrew formula 升级，
-不加载任何 Vault。
-平台校验与用户变量初始化使用 `always` tag，因此每次选择性执行都会运行。`samba`
-同时使用特殊的 `never` tag，默认完整配置不会执行它；只有显式选择 `samba` 时，才会
-加载 Samba Vault 并将
-`//infortrend-storage/Neurowissenschaften/AuditorischeNeurowissenschaften/Projekte/MXBI/data/<主机名>`
-挂载到 `/home/pi/server`。
-挂载启动后，`/home/pi/server` 会以 `mxbi-server` 名称加入 cogmoteGO 的可信 Samba root，并重启
-cogmoteGO 用户服务。
-
-## 部署实验
-
-`experiment.yml` 独立于 `rpi-mxbi-baseline.yml`，是实验部署入口。它假定 Samba、GitHub SSH、
-cogmoteGO 和 uv 已由既有环境准备好；不会重新配置这些组件。
-
-库存中的实验组位于 `mxbi_experiments` 下。`group1` 包含 `mxbi1` 到 `mxbi5`，并部署
-`GNGSiD`；`group2` 包含 `mxbi6` 到 `mxbi10`，并部署 `self-initiated-discriminate`。
-组名与实验名相互独立。每个实验组对应一个组变量文件，例如 `group_vars/group1.yml`：
-
-```yaml
-mxbi_experiment_name: GNGSiD
-mxbi_experiment_repository: git@github.com:CHiPmxbi/GNGSiD.git
+mxbi_experiment_name: <实验名>
+mxbi_experiment_repository: git@github.com:<组织>/<实验仓库>.git
 mxbi_experiment_uv_sync: true
 mxbi_experiment_cogmotego_email_recipients:
-  - YHu@dpz.eu
+  - <订阅者邮箱>
 ```
 
-将仓库地址替换为实际地址后运行：
+## 其他命令
 
-```nu
-ansible-playbook experiment.yml --limit group1
-ansible-playbook experiment.yml --limit mxbi1 --check --diff
+### 按需操作（tags）
+
+只做部分配置时，用 `--tags` 指定（会透传给 Ansible）。最常用的是 `update`：只升级 APT 与 Homebrew 包，不加载任何 Vault，仅提示 sudo 密码：
+
+```sh
+just baseline mxbi1 --tags update
 ```
 
-Playbook 会先将 `git@github.com:CHiPmxbi/mxbi_share_config.git` 同步到 `~/.config/mxbi`，
-再将实验仓库同步到 `~/<exp>`，创建 `~/<exp>/data`，并将其加入 cogmoteGO 的
-`mxbi-data` source 可信 root。它还部署并启用用户级 `mxbi-experiment.service`，在仓库根目录
-执行 `uv run main.py`。部署会停止该服务但保持 enabled，因此需要手动启动；每台设备只有该固定
-名称的实验服务。
-已有仓库会更新到 `main`；若受 Git 跟踪的文件存在未提交改动，Playbook 会保留这些改动、报告
-提示并跳过该仓库的更新。`data/` 等未跟踪文件不会阻止切换。
-实验仓库会递归克隆；每次更新时，所有子模块都会跟随 `.gitmodules` 配置的分支更新到最新提交，
-未配置分支时则跟随远端默认分支。已初始化子模块中的受跟踪本地修改与主仓库修改采用相同的保护
-策略。
-对于基于 uv 的实验，设置 `mxbi_experiment_uv_sync: true`。仓库同步后，每次部署都会以实验
-用户在仓库根目录执行 `uv sync --locked`。该选项默认为 `false`；check mode 只报告待执行的
-同步。若 `uv.lock` 缺失或过期，部署会失败，而不会在设备上修改仓库。
-共享配置仓库采用相同的本地修改保护；若 `~/.config/mxbi` 已存在但不是 Git 仓库，部署会停止，
-不会覆盖该目录。
-每个实验组通过 `mxbi_experiment_cogmotego_email_recipients` 维护权威订阅者列表；部署时会移除
-不属于当前组的地址，并添加缺失地址。
+其他常用示例：
+
+```sh
+just baseline mxbi1 --tags shell
+just baseline mxbi1 --tags 'system,homebrew'
+just baseline mxbi1 --tags github
+just baseline mxbi5 --tags cogmotego_email
+just baseline mxbi5 --tags samba
+```
+
+| tag               | 作用                                                                                                                                                                                                                                            |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `system`          | 系统软件包                                                                                                                                                                                                                                      |
+| `hifiberry`       | HiFiBerry Amp2 配置                                                                                                                                                                                                                             |
+| `homebrew`        | Linuxbrew 与托管 formula                                                                                                                                                                                                                        |
+| `github`          | GitHub SSH 凭据（加载 GitHub Vault）                                                                                                                                                                                                            |
+| `shell`           | Zsh 配置                                                                                                                                                                                                                                        |
+| `cogmotego`       | cogmoteGO                                                                                                                                                                                                                                       |
+| `cogmotego_email` | cogmoteGO email（加载 email Vault）                                                                                                                                                                                                             |
+| `mediamtx`        | MediaMTX                                                                                                                                                                                                                                        |
+| `desktop`         | 桌面与 VNC                                                                                                                                                                                                                                      |
+| `samba`           | Samba 挂载（`never` tag，默认不执行；加载 Samba Vault，将 `//infortrend-storage/Neurowissenschaften/AuditorischeNeurowissenschaften/Projekte/MXBI/data/<主机名>` 挂载到 `/home/pi/server`，注册 `mxbi-server` 可信根并重启 cogmoteGO 用户服务） |
+| `update`          | 仅 APT 缓存刷新与安全升级 + Homebrew formula 升级（不加载任何 Vault）                                                                                                                                                                           |
+
+平台校验与用户变量初始化使用 `always` tag，任何选择性执行都会先运行它们。
+
+### 全部命令
+
+`just` 命令的参数会直接传给 Ansible。读取 Vault 的配方会提示输入 Vault 密码；`just update` 不读取任何 Vault，因此只提示 sudo 密码。
+
+| 命令                            | 作用                                 | 需要 Vault 密码 |
+| ------------------------------- | ------------------------------------ | --------------- |
+| `just install`                  | 安装 Ansible collections             | 否              |
+| `just check`                    | lint + 两个 playbook 语法检查        | 否              |
+| `just inventory`                | 显示 inventory 分组与主机            | 否              |
+| `just tags`                     | 列出 baseline playbook 的 tags       | 否              |
+| `just baseline [主机/组]`       | 完整配置设备（默认全部 mxbi）        | 是              |
+| `just baseline-all [主机/组]`   | 完整配置，含 `never` tag（如 samba） | 是              |
+| `just baseline-check <主机/组>` | 配置检查模式（`--check --diff`）     | 是              |
+| `just exp <主机/组>`            | 部署实验                             | 否              |
+| `just exp-check <主机/组>`      | 实验部署检查模式                     | 否              |
+| `just samba <主机/组>`          | 挂载 Samba                           | 是              |
+| `just update [主机/组]`         | 仅升级 APT 与 Homebrew 包            | 仅 sudo         |
+
+## 常见问题
+
+- **提示输入 Vault 密码**：Vault 密码由团队管理员保管，需要时向管理员获取。
+- **连不上设备**：先 `ssh -G mxbi1` 检查解析结果（HostName / User / IdentityFile），确认 `~/.ssh/mxbi` 密钥存在且已注册到设备。
+- **报 collections 缺失**：重新执行 `just install`。
