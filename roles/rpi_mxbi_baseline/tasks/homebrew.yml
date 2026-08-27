@@ -3,6 +3,8 @@
   ansible.builtin.stat:
     path: "{{ rpi_mxbi_baseline_homebrew_prefix }}/bin/brew"
   register: rpi_mxbi_baseline_homebrew_binary
+  tags:
+    - update
 
 - name: Download the Homebrew installer
   ansible.builtin.get_url:
@@ -44,6 +46,8 @@
     HOME: "{{ rpi_mxbi_baseline_home }}"
     HOMEBREW_NO_AUTO_UPDATE: '1'
   when: rpi_mxbi_baseline_homebrew_binary.stat.exists or not ansible_check_mode
+  tags:
+    - update
 
 - name: Create the user font directory
   become: true

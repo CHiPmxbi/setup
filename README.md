@@ -32,10 +32,14 @@ just baseline-check mxbi1
 just exp mxbi5
 just exp-check group1
 just samba mxbi5
+just update
+just update mxbi8
 ```
 
 Recipe arguments are passed through to Ansible. Recipes that load a Vault leave
-password entry to Ansible's interactive prompt.
+password entry to Ansible's interactive prompt. `just update` upgrades APT and
+Homebrew packages and does not load a Vault, so it only prompts for the sudo
+password.
 
 ## Configuration
 
@@ -129,10 +133,13 @@ ansible-playbook rpi-mxbi-baseline.yml --limit mxbi1 --tags 'system,homebrew'
 ansible-playbook rpi-mxbi-baseline.yml --limit mxbi1 --tags github --ask-vault-pass
 ansible-playbook rpi-mxbi-baseline.yml --limit mxbi5 --tags cogmotego_email --ask-vault-pass
 ansible-playbook rpi-mxbi-baseline.yml --limit mxbi5 --tags samba --ask-vault-pass
+ansible-playbook rpi-mxbi-baseline.yml --limit mxbi8 --tags update
 ```
 
 Available tags are `system`, `hifiberry`, `homebrew`, `github`, `shell`,
-`cogmotego`, `cogmotego_email`, `mediamtx`, `desktop`, and `samba`.
+`cogmotego`, `cogmotego_email`, `mediamtx`, `desktop`, `samba`, and `update`.
+The `update` tag runs only APT cache refresh and safe upgrade plus the managed
+Homebrew formula upgrade, so it does not load any Vault.
 Platform validation and user fact initialization use the `always` tag and
 therefore run with every selection. `samba` also uses the special `never` tag,
 so full provisioning skips it by default. Explicitly selecting `samba` loads

@@ -49,3 +49,7 @@ exp-check target *args:
 # Configure the Samba mount for a host or group; extra arguments are passed to Ansible.
 samba target *args:
     ansible-playbook rpi-mxbi-baseline.yml --limit {{target}} --tags samba --ask-vault-pass {{args}}
+
+# Upgrade APT and Homebrew packages for a host or group; defaults to all mxbi hosts.
+update target='mxbi' *args:
+    ansible-playbook rpi-mxbi-baseline.yml --limit {{target}} --tags update {{args}}

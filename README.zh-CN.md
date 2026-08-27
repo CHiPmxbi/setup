@@ -30,9 +30,12 @@ just baseline-check mxbi1
 just exp mxbi5
 just exp-check group1
 just samba mxbi5
+just update
+just update mxbi8
 ```
 
 配方参数会直接传递给 Ansible。读取 Vault 的配方仍由 Ansible 交互式提示输入密码。
+`just update` 只升级 APT 与 Homebrew 包，不读取任何 Vault，因此仅提示 sudo 密码。
 
 ## 配置
 
@@ -117,10 +120,13 @@ ansible-playbook rpi-mxbi-baseline.yml --limit mxbi1 --tags 'system,homebrew'
 ansible-playbook rpi-mxbi-baseline.yml --limit mxbi1 --tags github --ask-vault-pass
 ansible-playbook rpi-mxbi-baseline.yml --limit mxbi5 --tags cogmotego_email --ask-vault-pass
 ansible-playbook rpi-mxbi-baseline.yml --limit mxbi5 --tags samba --ask-vault-pass
+ansible-playbook rpi-mxbi-baseline.yml --limit mxbi8 --tags update
 ```
 
 可用 tags 包括 `system`、`hifiberry`、`homebrew`、`github`、`shell`、
-`cogmotego`、`cogmotego_email`、`mediamtx`、`desktop` 和 `samba`。
+`cogmotego`、`cogmotego_email`、`mediamtx`、`desktop`、`samba` 和 `update`。
+`update` tag 只执行 APT 缓存刷新与安全升级，以及仓库管理的 Homebrew formula 升级，
+不加载任何 Vault。
 平台校验与用户变量初始化使用 `always` tag，因此每次选择性执行都会运行。`samba`
 同时使用特殊的 `never` tag，默认完整配置不会执行它；只有显式选择 `samba` 时，才会
 加载 Samba Vault 并将
