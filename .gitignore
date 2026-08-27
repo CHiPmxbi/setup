@@ -1,6 +1,7 @@
 .vault-password
 vault/mxbi/*.yml
-/group_vars/
+/group_vars/group1.yml
+/group_vars/group2.yml
 /inventory/hosts.yml
 **/*.key
 *.retry
