@@ -7,22 +7,15 @@
 ### 前置条件
 
 - 控制机：macOS / Linux（Ansible 不支持 Windows）。
-- 已安装 Ansible 与 just，且能通过 SSH 连接目标机。
+- 已安装 Homebrew，且能通过 SSH 连接目标机。
 
 > 该仓库只在控制机运行，请勿克隆到目标设备上。
 
-### 安装 Ansible 与 collections
+### 安装工具与 collections
 
 ```sh
-# macOS（Homebrew）
 brew install ansible ansible-lint just
-
-# Debian / Ubuntu 等 Linux（ansible 亦可用 pipx 安装）
-sudo apt install ansible
-pipx install ansible-lint
 ```
-
-`just`（命令运行器）：brew / apt 可用时优先，否则从 <https://github.com/casey/just> 安装。
 
 ```sh
 ansible-galaxy collection install -r requirements.yml

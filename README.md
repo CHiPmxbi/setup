@@ -7,22 +7,15 @@ Provisioning and setup tools for mxbi experiment workstations, run from a contro
 ### Prerequisites
 
 - Control machine: macOS / Linux (Ansible does not support Windows).
-- Ansible and just installed, with SSH access to the target machines.
+- Homebrew installed, with SSH access to the target machines.
 
 > Run this repository only from a control machine; do not clone it onto target devices.
 
-### Install Ansible and collections
+### Install tools and collections
 
 ```sh
-# macOS (Homebrew)
 brew install ansible ansible-lint just
-
-# Debian / Ubuntu and other Linux (ansible can also be installed with pipx)
-sudo apt install ansible
-pipx install ansible-lint
 ```
-
-`just` (command runner): prefer brew / apt when available, otherwise install from <https://github.com/casey/just>.
 
 ```sh
 ansible-galaxy collection install -r requirements.yml
